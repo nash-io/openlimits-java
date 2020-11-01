@@ -1,0 +1,22 @@
+plugins {
+    id 'java'
+}
+
+group 'org.example'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+task copyNativeDeps(type: Copy) {
+    from "${projectDir}/src/main/openlimits-lib/target/debug/libopenlimits_java.dylib"
+    into 'build/libs'
+}
+tasks.withType(Test) {
+    systemProperty "java.library.path", "build/libs"
+}
+
+dependencies {
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}
