@@ -1,12 +1,12 @@
 use jni;
-use jni::{errors, JNIEnv, JavaVM};
+use jni::{errors, JNIEnv};
 use jni::objects::{JClass, JValue, JObject, JString};
-use jni::sys::{jstring, jsize, jobjectArray, jobject, jint};
+use jni::sys::{jsize, jobject, jint};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 use rust_decimal::prelude::*;
 
 use openlimits::{
-  exchange::{OpenLimits, ExchangeAccount, ExchangeMarketData, Exchange}, 
+  exchange::{OpenLimits, ExchangeAccount, ExchangeMarketData}, 
   exchange_ws::OpenLimitsWs, 
   exchange_info::{MarketPair, ExchangeInfoRetrieval},
   any_exchange::{AnyExchange, InitAnyExchange, AnyWsExchange},
@@ -50,10 +50,6 @@ use openlimits::{
 };
 use tokio::stream::StreamExt;
 use std::sync::MutexGuard;
-use tokio::sync::mpsc::UnboundedSender;
-use std::sync::Arc;
-use futures_util::future::{select, Either, Future};
-
 
 fn decimal_to_jvalue<'a>(_env: &JNIEnv<'a>, s: Decimal) -> errors::Result<JValue<'a>> {
   Ok(JValue::Float(s.to_f32().unwrap()))
@@ -128,13 +124,6 @@ fn get_object<'a>(env: &'a JNIEnv, obj: &'a JObject, field: &str, t: &str) -> Re
   }
 }
 
-fn get_object_not_null<'a>(env: &'a JNIEnv, obj: &'a JObject, field: &str, t: &str) -> Result<JObject<'a>, String> {
-  match get_object(env, obj, field, t)? {
-    Some(o) => Ok(o),
-    None => Err(format!("Could not find non-null field {}", field))
-  }
-}
-
 fn get_string_non_null(env: &JNIEnv, obj: &JObject, field: &str) -> Result<String, String> {
   match get_string(env, obj, field)? {
     Some(s) => Ok(s),
@@ -155,16 +144,12 @@ fn get_long_default_with_default(
 fn bidask_to_jobject<'a>(env: &JNIEnv<'a>, resp: AskBid) -> errors::Result<JObject<'a>> {
   let cls_bidask = env.find_class("Lio/nash/openlimits/AskBid;")?;
 
-  let ctor_args = vec![
+  let ctor_args = &[
     decimal_to_jvalue(env, resp.price)?,
     decimal_to_jvalue(env, resp.qty)?,
   ];
 
-  let obj = env.new_object(cls_bidask, "(FF)V", ctor_args.as_ref());
-  match obj {
-    Ok(ok) => Ok(ok),
-    Err(e) => panic!("Failed to construct AskBid: {}", e)
-  }
+  env.new_object(cls_bidask, "(FF)V", ctor_args)
 }
 
 fn vec_to_java_arr<'a>(env: &JNIEnv<'a>, cls: JClass, v: &Vec<JObject<'a>>) -> errors::Result<JValue<'a>> {
@@ -181,19 +166,19 @@ fn orderbook_resp_to_jobject<'a>(env: &JNIEnv<'a>, resp: OrderBookResponse) -> e
   let asks = vec_to_jobject(env, "Lio/nash/openlimits/AskBid;", resp.asks, bidask_to_jobject)?;
   let bids = vec_to_jobject(env, "Lio/nash/openlimits/AskBid;", resp.bids, bidask_to_jobject)?;
 
-  let ctor_args = vec![
+  let ctor_args = &[
     asks.into(),
     bids.into(),
     JValue::Long(resp.last_update_id.unwrap_or_default() as i64)
   ];
-  env.new_object(cls_resp, "([Lio/nash/openlimits/AskBid;[Lio/nash/openlimits/AskBid;J)V", &ctor_args)
+  env.new_object(cls_resp, "([Lio/nash/openlimits/AskBid;[Lio/nash/openlimits/AskBid;J)V", ctor_args)
 }
 
 
 fn candle_to_jobject<'a>(env: &JNIEnv<'a>, candle: Candle) -> errors::Result<JObject<'a>> {
   let cls_candle = env.find_class("Lio/nash/openlimits/Candle;").expect("Failed to find Candle class");
   
-  let ctor_args = vec![
+  let ctor_args = &[
     JValue::Long(candle.time as i64),
     decimal_to_jvalue(env, candle.low)?, 
     decimal_to_jvalue(env, candle.high)?, 
@@ -202,7 +187,7 @@ fn candle_to_jobject<'a>(env: &JNIEnv<'a>, candle: Candle) -> errors::Result<JOb
     decimal_to_jvalue(env, candle.volume)?
   ];
 
-  env.new_object(cls_candle, "(JFFFFF)V", ctor_args.as_ref())
+  env.new_object(cls_candle, "(JFFFFF)V", ctor_args)
 }
 
 fn string_to_jstring<'a>(env: &JNIEnv<'a>, s: String) -> errors::Result<JString<'a>> {
@@ -235,7 +220,7 @@ fn string_option_to_null(v: Option<JString>) -> JValue {
 fn trade_to_jobject<'a>(env: &JNIEnv<'a>, trade: Trade) -> errors::Result<JObject<'a>> {
   let cls_trade = env.find_class("Lio/nash/openlimits/Trade;").expect("Failed to find Trade class");
   
-  let ctor_args: Vec<JValue> = vec![
+  let ctor_args = &[
     env.new_string(trade.id)?.into(),
     env.new_string(trade.order_id)?.into(),
     env.new_string(trade.market_pair)?.into(),
@@ -247,15 +232,15 @@ fn trade_to_jobject<'a>(env: &JNIEnv<'a>, trade: Trade) -> errors::Result<JObjec
     JValue::Long(trade.created_at as i64)
   ];
 
-  env.new_object(cls_trade, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;FFFLjava/lang/String;Ljava/lang/String;J)V", ctor_args.as_ref())
+  env.new_object(cls_trade, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;FFFLjava/lang/String;Ljava/lang/String;J)V", ctor_args)
 }
 
 fn ticker_to_jobject<'a>(env: &JNIEnv<'a>, resp: Ticker) -> errors::Result<JObject<'a>> {
   let cls_resp = env.find_class("Lio/nash/openlimits/Ticker;").expect("Failed to find Ticker class");
-  let ctor_args = vec![
+  let ctor_args = &[
     decimal_to_jvalue(env, resp.price)?
   ];
-  env.new_object(cls_resp, "(F)V", &ctor_args)
+  env.new_object(cls_resp, "(F)V", ctor_args)
 }
 
 fn order_type_to_string(typ: OrderType) -> &'static str {
@@ -284,7 +269,7 @@ fn order_status_to_string(typ: OrderStatus) -> &'static str {
 
 fn order_to_jobject<'a>(env: &JNIEnv<'a>, order: Order) -> errors::Result<JObject<'a>> {
   let cls_resp = env.find_class("Lio/nash/openlimits/Order;").expect("Failed to find Order class");
-  let ctor_args = vec![
+  let ctor_args = &[
     env.new_string(order.id)?.into(),
     env.new_string(order.market_pair)?.into(),
     string_option_to_null(order.client_order_id.map(|s| env.new_string(s)).transpose()?),
@@ -295,7 +280,7 @@ fn order_to_jobject<'a>(env: &JNIEnv<'a>, order: Order) -> errors::Result<JObjec
     env.new_string(order.size.to_string())?.into(),
     string_option_to_null(order.price.map(|p| env.new_string(p.to_string())).transpose()?)
   ];
-  env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", &ctor_args)
+  env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", ctor_args)
 }
 
 fn vec_to_jobject<'a, T, F>(env: &JNIEnv<'a>, cls: &str, entries: Vec<T>, f: F) -> errors::Result<JObject<'a>>
@@ -311,27 +296,27 @@ fn vec_to_jobject<'a, T, F>(env: &JNIEnv<'a>, cls: &str, entries: Vec<T>, f: F) 
 
 fn order_cancelled_to_jobject<'a>(env: &JNIEnv<'a>, order: OrderCanceled) -> errors::Result<JObject<'a>> {
   let cls_resp = env.find_class("Lio/nash/openlimits/OrderCanceled;").expect("Failed to find OrderCanceled class");
-  let ctor_args = vec![
+  let ctor_args = &[
     env.new_string(order.id)?.into(),
   ];
-  env.new_object(cls_resp, "(Ljava/lang/String;)V", &ctor_args)
+  env.new_object(cls_resp, "(Ljava/lang/String;)V", ctor_args)
 }
 
 fn balance_to_jobject<'a>(env: &JNIEnv<'a>, balance: Balance) -> errors::Result<JObject<'a>> {
   let cls_resp = env.find_class("Lio/nash/openlimits/Balance;").expect("Failed to find Balance class");
-  let ctor_args = vec![
+  let ctor_args = &[
     env.new_string(balance.asset)?.into(),
     env.new_string(balance.total.to_string())?.into(),
     env.new_string(balance.free.to_string())?.into(),
   ];
 
-  env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", &ctor_args)
+  env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", ctor_args)
 }
 
 fn market_pair_to_jobject<'a>(env: &JNIEnv<'a>, pair: MarketPair) -> errors::Result<JObject<'a>> {
   let cls_resp = env.find_class("Lio/nash/openlimits/MarketPair;").expect("Failed to find MarketPair class");
 
-  let ctor_args = vec![
+  let ctor_args = &[
     env.new_string(pair.base)?.into(),
     env.new_string(pair.quote)?.into(),
     env.new_string(pair.symbol)?.into(),
@@ -339,7 +324,7 @@ fn market_pair_to_jobject<'a>(env: &JNIEnv<'a>, pair: MarketPair) -> errors::Res
     env.new_string(pair.quote_increment.to_string())?.into(),
   ];
 
-  env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", &ctor_args)
+  env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", ctor_args)
 }
 
 // This keeps Rust from "mangling" the name and making it unique for this crate.
@@ -384,7 +369,7 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_subscribe(env: JNI
 
 
     for sub in subs {
-      rt.block_on(client.subscribe(sub));
+      rt.block_on(client.subscribe(sub)).expect("Failed to set up subscription");
     }
     loop {
       let msg = match rt.block_on(client.next()) {
@@ -394,30 +379,36 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_subscribe(env: JNI
           continue;
         }
       };
+     
       match msg {
         OpenLimitsWebsocketMessage::Trades(trades) => {
-          let out = vec_to_jobject(&env, "Lio/nash/openlimits/Trade;", trades, trade_to_jobject);
-          match out {
+          match vec_to_jobject(&env, "Lio/nash/openlimits/Trade;", trades, trade_to_jobject) {
             Ok(trades) => {
-              env.call_method(handler, "onTrades", "([Lio/nash/openlimits/Trade;)V", &[trades.into()]);
+              let res = env.call_method(handler, "onTrades", "([Lio/nash/openlimits/Trade;)V", &[trades.into()]);
+              if res.is_err() {
+                println!("Failed to do callback: {}", res.err().unwrap());
+              }
             },
             Err(e) => {
-              println!("Failed to parse orderbookmessage: {}", e);
+              println!("failed to conert object: {}", e);
             }
-          }
+          };
         },
         OpenLimitsWebsocketMessage::OrderBook(orderbook) => {
           match orderbook_resp_to_jobject(&env, orderbook) {
             Ok(orderbook) => {
-              env.call_method(handler, "onOrderbook", "(Lio/nash/openlimits/OrderbookResponse;)V", &[orderbook.into()]);
+              let res = env.call_method(handler, "onOrderbook", "(Lio/nash/openlimits/OrderbookResponse;)V", &[orderbook.into()]);
+              if res.is_err() {
+                println!("Failed to do callback: {}", res.err().unwrap());
+              }
             },
             Err(e) => {
-              println!("Failed to parse orderbookmessage: {}", e);
+              println!("failed to conert object: {}", e);
             }
-          }
+          };
         },
         msg => {
-          println!("Ignoring {:?}", msg);
+          println!("Unknown message: {:?}", msg);
         }
       };
     }
