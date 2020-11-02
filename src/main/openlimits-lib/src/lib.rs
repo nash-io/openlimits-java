@@ -26,8 +26,10 @@ use openlimits::{
       Side,
       CancelAllOrdersRequest, 
       CancelOrderRequest,
+      OrderType,
       AskBid,
       OpenLimitOrderRequest,
+      OrderStatus,
       OpenMarketOrderRequest,
       GetOrderHistoryRequest,
       GetOrderRequest,
@@ -97,8 +99,61 @@ fn get_string(env: &JNIEnv, obj: &JObject, field: &str) -> Result<Option<String>
   }
 }
 
+fn get_long_nullable(
+  env: &JNIEnv,
+  obj: &JObject,
+  field: &str,
+) -> Result<Option<u64>, String> {
+  let f = get_field(env, obj, field,  "J")?;
+  match f {
+    None => Ok(None),
+    Some(f) => Ok(Some(f.j().expect(format!("{} not long", field).as_str()) as u64))
+  }
+}
 
-fn bidask_to_jobject<'a>(env: &JNIEnv<'a>, resp: &AskBid) -> errors::Result<JObject<'a>> {
+
+fn get_object<'a>(env: &'a JNIEnv, obj: &'a JObject, field: &str, t: &str) -> Result<Option<JObject<'a>>, String> {
+  let f = get_field(env, obj, field, t)?;
+  match f {
+    Some(s) => match s.l() {
+      Ok(obj) => {
+        if obj.is_null() {
+          Ok(None)
+        } else {
+          Ok(Some(obj))
+        }
+      },
+      _ => Err(format!("Field {} not an object", field))
+    },
+    None => Ok(None)
+  }
+}
+
+fn get_object_non_null<'a>(env: &'a JNIEnv, obj: &'a JObject, field: &str, t: &str) -> Result<JObject<'a>, String> {
+  match get_object(env, obj, field, t)? {
+    Some(s) => Ok(s),
+    None => Err(format!("Could not find non-null field {}", field))
+  }
+}
+
+fn get_string_non_null(env: &JNIEnv, obj: &JObject, field: &str) -> Result<String, String> {
+  match get_string(env, obj, field)? {
+    Some(s) => Ok(s),
+    _ => Err(format!("Could not find non-null field {}", field))
+  }
+}
+fn get_long_default_with_default(
+  env: &JNIEnv,
+  obj: &JObject,
+  field: &str,
+  def: i64
+) -> Result<u64, String> {
+  let f = get_field(env, obj, field,  "J")?;
+  Ok(f.unwrap_or(JValue::Long(def)).j().expect(format!("{} not long", field).as_str()) as u64)
+}
+
+
+fn bidask_to_jobject<'a>(env: &JNIEnv<'a>, resp: AskBid) -> errors::Result<JObject<'a>> {
   let cls_bidask = env.find_class("Lio/nash/openlimits/AskBid;")?;
 
   let ctor_args = vec![
@@ -123,24 +178,13 @@ fn vec_to_java_arr<'a>(env: &JNIEnv<'a>, cls: JClass, v: &Vec<JObject<'a>>) -> e
 
 fn orderbook_resp_to_jobject<'a>(env: &JNIEnv<'a>, resp: OrderBookResponse) -> errors::Result<JObject<'a>> {
   let cls_resp = env.find_class("Lio/nash/openlimits/OrderbookResponse;").expect("Failed to find OrderbookResponse class");
-  let cls_bidask = env.find_class("Lio/nash/openlimits/AskBid;").expect("Failed to find AskBid class");
 
-  let mut bids = vec![];
-  for bid in resp.bids {
-    bids.push(bidask_to_jobject(env, &bid)?);
-  }
-  let bid_arr = vec_to_java_arr(env, cls_bidask, &bids)?;
-
-  let mut asks: Vec<JObject> = vec![];
-  for ask in resp.asks {
-    asks.push(bidask_to_jobject(env, &ask)?);
-  }
-
-  let ask_arr = vec_to_java_arr(env, cls_bidask, &asks)?;
+  let asks = vec_to_jobject(env, "Lio/nash/openlimits/AskBid;", resp.asks, bidask_to_jobject)?;
+  let bids = vec_to_jobject(env, "Lio/nash/openlimits/AskBid;", resp.bids, bidask_to_jobject)?;
 
   let ctor_args = vec![
-    ask_arr,
-    bid_arr,
+    asks.into(),
+    bids.into(),
     JValue::Long(resp.last_update_id.unwrap_or_default() as i64)
   ];
   env.new_object(cls_resp, "([Lio/nash/openlimits/AskBid;[Lio/nash/openlimits/AskBid;J)V", &ctor_args)
@@ -181,6 +225,14 @@ fn liquidity_to_string<'a>(env: &JNIEnv<'a>, s: Liquidity) -> errors::Result<JSt
   string_to_jstring(env, String::from(s))
 }
 
+fn string_option_to_null(v: Option<JString>) -> JValue {
+  match v {
+    None => JValue::Object(JObject::null()),
+    Some(s) => JValue::Object(s.into())
+  }
+}
+
+
 fn trade_to_jobject<'a>(env: &JNIEnv<'a>, trade: Trade) -> errors::Result<JObject<'a>> {
   let cls_trade = env.find_class("Lio/nash/openlimits/Trade;").expect("Failed to find Trade class");
   
@@ -207,11 +259,88 @@ fn ticker_to_jobject<'a>(env: &JNIEnv<'a>, resp: Ticker) -> errors::Result<JObje
   env.new_object(cls_resp, "(F)V", &ctor_args)
 }
 
-fn order_to_jobject<'a>(env: &JNIEnv<'a>, resp: Order) -> errors::Result<JObject<'a>> {
+fn order_type_to_string(typ: OrderType) -> &'static str {
+  match typ {
+    OrderType::Limit => "Limit",
+    OrderType::Market => "Market",
+    OrderType::StopLimit => "StopLimit",
+    OrderType::StopMarket => "StopMarket",
+    OrderType::Unknown => "Unknown",
+  }
+}
+fn order_status_to_string(typ: OrderStatus) -> &'static str {
+  match typ {
+    OrderStatus::New => "New",
+    OrderStatus::PartiallyFilled => "PartiallyFilled",
+    OrderStatus::Filled => "Filled",
+    OrderStatus::Canceled => "Canceled",
+    OrderStatus::PendingCancel => "PendingCancel",
+    OrderStatus::Rejected => "Rejected",
+    OrderStatus::Expired => "Expired",
+    OrderStatus::Open => "Open",
+    OrderStatus::Pending => "Pending",
+    OrderStatus::Active => "Active",
+  }
+}
+
+fn order_to_jobject<'a>(env: &JNIEnv<'a>, order: Order) -> errors::Result<JObject<'a>> {
   let cls_resp = env.find_class("Lio/nash/openlimits/Order;").expect("Failed to find Order class");
   let ctor_args = vec![
+    env.new_string(order.id)?.into(),
+    env.new_string(order.market_pair)?.into(),
+    string_option_to_null(order.client_order_id.map(|s| env.new_string(s)).transpose()?),
+    JValue::Long(order.created_at.unwrap_or_default() as i64),
+    env.new_string(order_type_to_string(order.order_type))?.into(),
+    side_to_string(env, order.side)?.into(),
+    env.new_string(order_status_to_string(order.status))?.into(),
+    env.new_string(order.size.to_string())?.into(),
+    string_option_to_null(order.price.map(|p| env.new_string(p.to_string())).transpose()?)
   ];
-  env.new_object(cls_resp, "()V", &ctor_args)
+  env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", &ctor_args)
+}
+
+fn vec_to_jobject<'a, T, F>(env: &JNIEnv<'a>, cls: &str, entries: Vec<T>, f: F) -> errors::Result<JObject<'a>>
+  where F: Fn(&JNIEnv<'a>,T) -> errors::Result<JObject<'a>> {
+  let pairs_maybe: errors::Result<Vec<_>> = entries.into_iter().map(|v| f(env, v)).collect();
+  let pairs = pairs_maybe?;
+  let pairs_cls = env.find_class(cls)?;
+
+  let out = vec_to_java_arr(&env, pairs_cls, &pairs)?;
+  out.l()
+}
+
+
+fn order_cancelled_to_jobject<'a>(env: &JNIEnv<'a>, order: OrderCanceled) -> errors::Result<JObject<'a>> {
+  let cls_resp = env.find_class("Lio/nash/openlimits/OrderCanceled;").expect("Failed to find OrderCanceled class");
+  let ctor_args = vec![
+    env.new_string(order.id)?.into(),
+  ];
+  env.new_object(cls_resp, "(Ljava/lang/String;)V", &ctor_args)
+}
+
+fn balance_to_jobject<'a>(env: &JNIEnv<'a>, balance: Balance) -> errors::Result<JObject<'a>> {
+  let cls_resp = env.find_class("Lio/nash/openlimits/Balance;").expect("Failed to find Balance class");
+  let ctor_args = vec![
+    env.new_string(balance.asset)?.into(),
+    env.new_string(balance.total.to_string())?.into(),
+    env.new_string(balance.free.to_string())?.into(),
+  ];
+
+  env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", &ctor_args)
+}
+
+fn market_pair_to_jobject<'a>(env: &JNIEnv<'a>, pair: MarketPair) -> errors::Result<JObject<'a>> {
+  let cls_resp = env.find_class("Lio/nash/openlimits/MarketPair;").expect("Failed to find MarketPair class");
+
+  let ctor_args = vec![
+    env.new_string(pair.base)?.into(),
+    env.new_string(pair.quote)?.into(),
+    env.new_string(pair.symbol)?.into(),
+    env.new_string(pair.base_increment.to_string())?.into(),
+    env.new_string(pair.quote_increment.to_string())?.into(),
+  ];
+
+  env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", &ctor_args)
 }
 
 // This keeps Rust from "mangling" the name and making it unique for this crate.
@@ -271,15 +400,8 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getHistoricRates(e
   let req = get_historic_rates_request(&env, &hist_req).expect("Failed to parse params");
 
   let resp = runtime.block_on(client.get_historic_rates(&req)).expect("Failed to get response");
-  let mut candles: Vec<JObject> = Vec::new();
-  for candle in resp {
-    candles.push(candle_to_jobject(&env, candle).unwrap());
-  }
-  
-  let candle_cls = env.find_class("Lio/nash/openlimits/Candle;").expect("Can't find Candle Class");
-  let out = vec_to_java_arr(&env, candle_cls, &candles).expect("Failed to convert vec to array");
-
-  out.l().expect("failed to convert out array to object").into_inner()
+  let out = vec_to_jobject(&env, "Lio/nash/openlimits/Candle;", resp, candle_to_jobject).expect("Failed to convert result to Java");
+  out.into_inner()
 }
 
 
@@ -291,18 +413,8 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getHistoricTrades(
   let req = get_historic_trades_request(&env, &trades_req).expect("Failed to parse params");
 
   let resp = runtime.block_on(client.get_historic_trades(&req)).expect("Failed to get response");
-  let mut trades: Vec<JObject> = Vec::new();
-  for trade in resp {
-    trades.push(match trade_to_jobject(&env, trade) {
-      Ok(r) => r,
-      Err(e) => panic!("Failed to create Trade: {}", e)
-    });
-  }
-  
-  let trade_cls = env.find_class("Lio/nash/openlimits/Trade;").expect("Can't find Trade Class");
-  let out = vec_to_java_arr(&env, trade_cls, &trades).expect("Failed to convert vec to array");
-
-  out.l().expect("failed to convert out array to object").into_inner()
+  let out = vec_to_jobject(&env, "Lio/nash/openlimits/Trade;", resp, trade_to_jobject).expect("Failed to convert result to Java");
+  out.into_inner()
 }
 
 #[no_mangle]
@@ -311,7 +423,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_limitBuy(env: JNIE
   let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
 
   let req = get_limit_request(&env, &req).expect("Failed to parse params");
-
   let resp = runtime.block_on(client.limit_buy(&req)).expect("Failed to get response");
   order_to_jobject(&env, resp).expect("Failed to convert response to order").into_inner()
 }
@@ -351,20 +462,107 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_marketSell(env: JN
   order_to_jobject(&env, resp).expect("Failed to convert response to order").into_inner()
 }
 
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getAllOpenOrders(env: JNIEnv, _class: JClass,  cli: JObject) -> jobject {
+  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
+  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
 
+  let resp = runtime.block_on(client.get_all_open_orders()).expect("Failed to get response");
 
-
-fn get_long_nullable(
-  env: &JNIEnv,
-  obj: &JObject,
-  field: &str,
-) -> Result<Option<u64>, String> {
-  let f = get_field(env, obj, field,  "J")?;
-  match f {
-    None => Ok(None),
-    Some(f) => Ok(Some(f.j().expect(format!("{} not long", field).as_str()) as u64))
-  }
+  let out = vec_to_jobject(&env, "Lio/nash/openlimits/Order;", resp, order_to_jobject).expect("Failed to convert result to Java");
+  out.into_inner()
 }
+
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getOrderHistory(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
+  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
+  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let req = get_order_history_request(&env, &req).expect("Failed to parse params");
+
+  let resp = runtime.block_on(client.get_order_history(&req)).expect("Failed to get response");
+  let out = vec_to_jobject(&env, "Lio/nash/openlimits/Order;", resp, order_to_jobject).expect("Failed to convert result to Java");
+  out.into_inner()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getOrder(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
+  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
+  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let req = get_order_request(&env, &req).expect("Failed to parse params");
+
+  let resp = runtime.block_on(client.get_order(&req)).expect("Failed to get response");
+
+  order_to_jobject(&env, resp).expect("Failed to convert response to order").into_inner()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getTradeHistory(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
+  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
+  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let req = get_trade_history_request(&env, &req).expect("Failed to parse params");
+
+  let resp = runtime.block_on(client.get_trade_history(&req)).expect("Failed to get response");
+  let out = vec_to_jobject(&env, "Lio/nash/openlimits/Trade;", resp, trade_to_jobject).expect("Failed to convert result to Java");
+  out.into_inner()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getAccountBalances(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
+  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
+  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let req = match req.is_null() {
+    true => None,
+    false => Some(get_paginator(&env, &req))
+  };
+  let paginator = req.transpose().expect("Invalid paginator object");
+
+  let resp = runtime.block_on(client.get_account_balances(paginator)).expect("Failed to get response");
+  let out = vec_to_jobject(&env, "Lio/nash/openlimits/Balance;", resp, balance_to_jobject).expect("Failed to convert result to Java");
+  out.into_inner()
+}
+
+
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_cancelOrder(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
+  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
+  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let req = get_cancel_order_request(&env, &req).expect("Failed to parse params");
+
+  let resp = runtime.block_on(client.cancel_order(&req)).expect("Failed to get response");
+
+  order_cancelled_to_jobject(&env, resp).expect("Failed to convert response to order").into_inner()
+}
+
+
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_cancelAllOrders(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
+  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
+  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let req = get_cancel_all_orders_request(&env, &req).expect("Failed to parse params");
+
+  let resp = runtime.block_on(client.cancel_all_orders(&req)).expect("Failed to get response");
+
+  let out = vec_to_jobject(&env, "Lio/nash/openlimits/OrderCanceled;", resp, order_cancelled_to_jobject).expect("Failed to convert result to Java");
+  out.into_inner()
+}
+
+
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_receivePairs(env: JNIEnv, _class: JClass,  cli: JObject) -> jobject {
+  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
+  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+
+  
+  let resp = runtime.block_on(client.retrieve_pairs()).expect("Failed to get response");
+  let pairs_maybe: errors::Result<Vec<_>> = resp.into_iter().map(|v| market_pair_to_jobject(&env, v)).collect();
+  let pairs = pairs_maybe.expect("Failed to convert Pairs to Java");
+  let pairs_cls = env.find_class("Lio/nash/openlimits/MarketPair;").expect("Can't find MarketPair Class");
+
+  let out = vec_to_java_arr(&env, pairs_cls, &pairs).expect("Failed to convert vec to array");
+  out.l().expect("failed to convert out array to object").into_inner()
+}
+
+
 
 fn get_paginator(
   env: &JNIEnv,
@@ -376,13 +574,15 @@ fn get_paginator(
   let before = get_string(env, paginator, "before").expect("No before field");
   let after = get_string(env, paginator, "after").expect("No after field");
 
-  Ok(Paginator {
-    start_time: start_time.map(|v| v as u64 ),
-    end_time: end_time.map(|v| v as u64 ),
-    limit: limit.map(|v| v as u64 ),
-    before,
-    after
-  })
+  Ok(
+    Paginator {
+      start_time: start_time.map(|v| v as u64 ),
+      end_time: end_time.map(|v| v as u64 ),
+      limit: limit.map(|v| v as u64 ),
+      before,
+      after
+    }
+  )
 }
 
 fn interval_from_string(
@@ -408,124 +608,175 @@ fn interval_from_string(
   }
 }
 
+
+fn get_cancel_order_request(
+  env: &JNIEnv,
+  req: &JObject
+) -> Result<CancelOrderRequest, String> {
+  let id = get_string_non_null(env, req, "id")?;
+  let market_pair = get_string(env, req, "market")?;
+
+  Ok(
+    CancelOrderRequest {
+      market_pair,
+      id
+    }
+  )
+}
+
+
+
+fn get_cancel_all_orders_request(
+  env: &JNIEnv,
+  req: &JObject
+) -> Result<CancelAllOrdersRequest, String> {
+  let market_pair = get_string(env, req, "market")?;
+
+  Ok(
+    CancelAllOrdersRequest {
+      market_pair,
+    }
+  )
+}
+
 fn get_historic_trades_request(
   env: &JNIEnv,
   trades_req: &JObject
-) -> errors::Result<GetHistoricTradesRequest> {
-  let market_pair = get_string(env, trades_req, "market").expect("Can't find market field").expect("market must be non-null");
-  let paginator = get_field(env, trades_req, "paginator", "Lio/nash/openlimits/Paginator;").expect("paginator field not found").map(|i|i.l().expect("Paginator not object"));
-  let paginator = match paginator {
-    None => None,
-    Some(paginator) => {
-      if paginator.is_null() {
-        None
-      } else {
-        Some(get_paginator(env, &paginator).expect("Failed to parse paginator"))
-      }
+) -> Result<GetHistoricTradesRequest, String> {
+  let market_pair = get_string_non_null(env, trades_req, "market")?;
+
+  let paginator = get_object(env, trades_req, "paginator", "Lio/nash/openlimits/Paginator;")?;
+  let paginator = paginator.map(|paginator| get_paginator(env, &paginator)).transpose()?;
+
+  Ok(
+    GetHistoricTradesRequest {
+      market_pair,
+      paginator
     }
-  };
-  
-  Ok(GetHistoricTradesRequest {
-    market_pair,
-    paginator
-  })
+  )
+}
+
+fn get_order_history_request(
+  env: &JNIEnv,
+  req: &JObject
+) -> Result<GetOrderHistoryRequest, String> {
+  let market_pair = get_string(env, req, "market")?;
+
+  let paginator = get_object(env, req, "paginator", "Lio/nash/openlimits/Paginator;")?;
+  let paginator = paginator.map(|paginator| get_paginator(env, &paginator)).transpose()?;
+
+  Ok(
+    GetOrderHistoryRequest {
+      paginator,
+      market_pair
+    }
+  )
+}
+
+fn get_order_request(
+  env: &JNIEnv,
+  req: &JObject
+) -> Result<GetOrderRequest, String> {
+  let id = get_string_non_null(env, req, "id")?;
+  let market_pair = get_string(env, req, "market")?;
+
+  Ok(
+    GetOrderRequest {
+      id,
+      market_pair
+    }
+  )
+}
+
+fn get_trade_history_request(
+  env: &JNIEnv,
+  hist_req: &JObject
+) -> Result<TradeHistoryRequest, String> {
+  let market_pair = get_string(env, hist_req, "market")?;
+  let order_id = get_string(env, hist_req, "orderId")?;
+  let paginator = get_object(env, hist_req, "paginator", "Lio/nash/openlimits/Paginator;")?;
+  let paginator = paginator.map(|paginator| get_paginator(env, &paginator)).transpose()?;
+
+  Ok(
+    TradeHistoryRequest {
+      market_pair,
+      order_id,
+      paginator
+    }
+  )
 }
 
 fn get_historic_rates_request(
   env: &JNIEnv,
   hist_req: &JObject
-) -> errors::Result<GetHistoricRatesRequest> {
-  let market_pair = get_string(env, hist_req, "market").expect("Can't find market field").expect("market must be non-null");
-  let interval = get_string(env, hist_req, "interval").expect("Can't find interval field").expect("interval must be non-null");
-  let paginator = get_field(env, hist_req, "paginator", "Lio/nash/openlimits/Paginator;").expect("paginator field not found").map(|i|i.l().expect("Paginator not object"));
-  let paginator = match paginator {
-    None => None,
-    Some(paginator) => {
-      if paginator.is_null() {
-        None
-      } else {
-        Some(get_paginator(env, &paginator).expect("Failed to parse paginator"))
-      }
+) -> Result<GetHistoricRatesRequest, String> {
+  let market_pair = get_string_non_null(env, hist_req, "market")?;
+  let interval = get_string_non_null(env, hist_req, "interval")?;
+
+  let paginator = get_object(env, hist_req, "paginator", "Lio/nash/openlimits/Paginator;")?;
+  let paginator = paginator.map(|paginator| get_paginator(env, &paginator)).transpose()?;
+
+  Ok(
+    GetHistoricRatesRequest {
+      market_pair,
+      interval: interval_from_string(interval)?,
+      paginator
     }
-  };
-
-  Ok(GetHistoricRatesRequest {
-    market_pair,
-    interval: interval_from_string(interval).unwrap(),
-    paginator
-  })
-
+  )
 }
 
 fn get_options_nash_credentials(
   env: &JNIEnv,
   nash: &JObject,
 ) -> Result<Option<NashCredentials>, String> {
-  let credentials_opt = get_field(&env, nash, "credentials",  "Lio/nash/openlimits/NashCredentials;")?;
-  
-  let credentials =match credentials_opt {
-    Some(c) => c.l().expect("Credentials object not of NashCredentials"),
-    None => return Ok(None)
-  };
+  let credentials = get_object(&env, nash, "credentials",  "Lio/nash/openlimits/NashCredentials;")?;
 
-  let secret = get_string(&env, &credentials, "secret")?.expect("Missing field secret");
-  let session = get_string(&env, &credentials, "session")?.expect("Missing field session");
-
-  Ok(Some(NashCredentials {
-    secret,
-    session
-  }))
+  credentials.map(|credentials| {
+    let secret = get_string_non_null(&env, &credentials, "secret")?;
+    let session = get_string_non_null(&env, &credentials, "session")?;
+    Ok(
+      NashCredentials {
+        secret,
+        session
+      }
+    )
+  }).transpose()
 }
 
-fn get_long_default_with_default(
-  env: &JNIEnv,
-  obj: &JObject,
-  field: &str,
-  def: i64
-) -> Result<u64, String> {
-  let f = get_field(env, obj, field,  "J")?;
-  Ok(f.unwrap_or(JValue::Long(def)).j().expect(format!("{} not long", field).as_str()) as u64)
-}
 
 fn get_limit_request(
   env: &JNIEnv,
   req: &JObject,
 ) -> Result<OpenLimitOrderRequest, String> {
-  let size = get_string(env, req, "size")?.expect("Missing field size on limit request params");
-  let price = get_string(env, req, "price")?.expect("Missing field price on limit request params");
-  let market_pair = get_string(env, req, "market")?.expect("Missing field market on limit request params");
-  let size = Decimal::from_str(size.as_str());
-  let price = Decimal::from_str(price.as_str());
+  let size = get_string_non_null(env, req, "size")?;
+  let price = get_string_non_null(env, req, "price")?;
+  let market_pair = get_string_non_null(env, req, "market")?;
+  let size = Decimal::from_str(size.as_str()).map_err(|e|e.to_string())?;
+  let price = Decimal::from_str(price.as_str()).map_err(|e|e.to_string())?;
 
-  match (size, price) {
-    (Ok(size), Ok(price)) => Ok(
-      OpenLimitOrderRequest {
-        size,
-        price,
-        market_pair,
-      }
-    ),
-    _ => Err(String::from("Failed to parse size of price"))
-  }
+  Ok(
+    OpenLimitOrderRequest {
+      size,
+      price,
+      market_pair,
+    }
+  )
 }
 
 fn get_market_request(
   env: &JNIEnv,
   req: &JObject,
 ) -> Result<OpenMarketOrderRequest, String> {
-  let size = get_string(env, req, "size")?.expect("Missing field size on limit request params");
-  let market_pair = get_string(env, req, "market")?.expect("Missing field market on limit request params");
-  let size = Decimal::from_str(size.as_str());
+  let size = get_string_non_null(env, req, "size")?;
+  let market_pair = get_string_non_null(env, req, "market")?;
+  let size = Decimal::from_str(size.as_str()).map_err(|e|e.to_string())?;
 
-  match size {
-    Ok(size) => Ok(
-      OpenMarketOrderRequest {
-        size,
-        market_pair,
-      }
-    ),
-    _ => Err(String::from("Failed to parse size of price"))
-  }
+  Ok(
+    OpenMarketOrderRequest {
+      size,
+      market_pair,
+    }
+  )
 }
 
 fn get_options_nash(
@@ -534,16 +785,13 @@ fn get_options_nash(
 ) -> Result<InitAnyExchange, String> {
   let credentials = get_options_nash_credentials(env, nash)?;
   let client_id = get_long_default_with_default(env, nash, "clientId", 0)?;
-  let environment = get_string(env, nash, "environment")?;
+  let environment = get_string_non_null(env, nash, "environment")?;
   let timeout = get_long_default_with_default(env, nash, "timeout", 1000)?;
 
-  let environment = match environment {
-    Some(r) => match r.as_str() {
-      "production" => Environment::Production,
-      "sandbox" => Environment::Sandbox,
-      _ => return Err(format!("Invalid environment {}", r))
-    },
-    None => return Err(format!("Missing environment"))
+  let environment = match environment.as_str() {
+    "production" => Environment::Production,
+    "sandbox" => Environment::Sandbox,
+    r => return Err(format!("Invalid environment {}", r))
   };
 
   Ok(
@@ -563,18 +811,18 @@ fn get_options_binance_credentials(
   binance: &JObject,
 ) -> Result<Option<BinanceCredentials>, String> {
   
-  let credentials_opt = get_field(&env, binance, "credentials",  "Lio/nash/openlimits/BinanceCredentials;")?;
-  let credentials = match credentials_opt {
-    Some(c) => c.l().unwrap(),
-    None => return Ok(None)
-  };
+  let credentials_opt = get_object(&env, binance, "credentials",  "Lio/nash/openlimits/BinanceCredentials;")?;
 
-  let api_key = get_string(&env, &credentials, "apiKey")?.unwrap();
-  let api_secret = get_string(&env, &credentials, "apiSecret")?.unwrap();
-  Ok(Some(BinanceCredentials {
-    api_key,
-    api_secret
-  }))
+  credentials_opt.map(|credentials| {
+    let api_key = get_string_non_null(&env, &credentials, "apiKey")?;
+    let api_secret = get_string_non_null(&env, &credentials, "apiSecret")?;
+    Ok(
+      BinanceCredentials {
+        api_key,
+        api_secret
+      }
+    )
+  }).transpose()
 }
 
 fn get_options_binance(
@@ -597,11 +845,11 @@ fn get_options(
   env: &JNIEnv,
   opts: &JObject,
 ) -> Result<InitAnyExchange, String> {
-  let nash = get_field(&env, opts, "nash",  "Lio/nash/openlimits/NashConfig;")?.unwrap().l().unwrap();
-  let binance = get_field(&env, opts, "binance",  "Lio/nash/openlimits/BinanceConfig;")?.unwrap().l().unwrap();
-  match (!nash.is_null(), !binance.is_null()) {
-    (true, _) => get_options_nash(&env, &nash),
-    (_, true) => get_options_binance(&env, &binance),
+  let nash = get_object(&env, opts, "nash",  "Lio/nash/openlimits/NashConfig;")?;
+  let binance = get_object(&env, opts, "binance",  "Lio/nash/openlimits/BinanceConfig;")?;
+  match (nash, binance) {
+    (Some(nash), _) => get_options_nash(&env, &nash),
+    (_, Some(binance)) => get_options_binance(&env, &binance),
     // (_, Ok(binance)) => {},
     _ => Err(String::from("Invalid config, nash and binance field both null"))
   }

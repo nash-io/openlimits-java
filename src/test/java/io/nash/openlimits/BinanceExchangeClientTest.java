@@ -23,6 +23,32 @@ public class BinanceExchangeClientTest extends TestCase {
     public void testOrderBook() {
         System.out.println(client.orderBook("BNBBTC"));
     }
+    public void testLimitBuy() {
+        System.out.println(client.limitBuy(new LimitRequest(
+                "0.001",
+                "1",
+                "BNBBTC"
+        )));
+    }
+    public void testLimitSell() {
+        System.out.println(client.limitSell(new LimitRequest(
+                "0.001",
+                "1",
+                "BNBBTC"
+        )));
+    }
+    public void testMarketBuy() {
+        System.out.println(client.marketBuy(new MarketRequest(
+                "1",
+                "BNBBTC"
+        )));
+    }
+    public void testMarketSell() {
+        System.out.println(client.marketSell(new MarketRequest(
+                "1",
+                "BNBBTC"
+        )));
+    }
     public void testPriceTicker() {
         System.out.println(client.getPriceTicker("BNBBTC"));
     }
@@ -32,4 +58,60 @@ public class BinanceExchangeClientTest extends TestCase {
                 "OneHour"
         ))));
     }
+    public void testGetOrderHistory() {
+        System.out.println(Arrays.toString(client.getOrderHistory( new GetOrderHistoryRequest(
+                "BNBBTC"
+        ))));
+    }
+    public void testGetOrder() {
+        Order order = client.limitSell(new LimitRequest(
+                "0.001",
+                "1",
+                "BNBBTC"
+        ));
+
+        System.out.println(client.getOrder(new GetOrderRequest(order.id, "BNBBTC")));
+    }
+    public void testGetTradeHistory() {
+        System.out.println(Arrays.toString(client.getTradeHistory( new TradeHistoryRequest(
+                "BNBBTC",
+                null,
+                null
+        ))));
+    }
+    public void testGetBalances() {
+        System.out.println(Arrays.toString(client.getAccountBalances(null)));
+    }
+
+    public void testCancelOrder() {
+        Order order = client.limitSell(new LimitRequest(
+                "0.001",
+                "1",
+                "BNBBTC"
+        ));
+        System.out.println("Cancelling: " + order);
+        System.out.println(
+                client.cancelOrder(new CancelOrderRequest(order.id, "BNBBTC"))
+        );
+    }
+
+    public void testCancelAllOrders() {
+        client.limitSell(new LimitRequest(
+                "0.001",
+                "1",
+                "BNBBTC"
+        ));
+        client.limitSell(new LimitRequest(
+                "0.001",
+                "1",
+                "BNBBTC"
+        ));
+        System.out.println(
+                Arrays.toString(client.cancelAllOrders(new CancelAllOrdersRequest("BNBBTC")))
+        );
+    }
+    public void testReceivePairs() {
+        System.out.println(Arrays.toString(client.receivePairs()));
+    }
+
 }
