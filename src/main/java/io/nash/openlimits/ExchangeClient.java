@@ -1,10 +1,15 @@
 package io.nash.openlimits;
 
 
+import java.lang.reflect.Array;
+import java.util.Arrays;
+
 public class ExchangeClient {
     static {
         System.loadLibrary("openlimits_java");
     }
+    private ExchangeClientConfig config;
+    private long _config;
     private long _client;
     private long _runtime;
     native private OrderbookResponse orderBook(ExchangeClient client, String market);
@@ -26,8 +31,16 @@ public class ExchangeClient {
 
     native private MarketPair[] receivePairs(ExchangeClient client);
 
+
+    native private int subscribe(ExchangeClient client, Subscription[] subscriptions, OpenLimitsEventHandler handler);
+
     native private int init(ExchangeClient client, ExchangeClientConfig conf);
-    private ExchangeClientConfig config;
+    public void subscribe(Subscription[] subscriptions, OpenLimitsEventHandler handler) {
+        this.subscribe(this, subscriptions, handler);
+    }
+
+    public void subscribe(OpenLimitsEventHandler handler){
+    }
 
     public Order limitBuy(LimitRequest request) {
         return this.limitBuy(this, request);
@@ -79,26 +92,49 @@ public class ExchangeClient {
     }
     public ExchangeClient(ExchangeClientConfig conf) {
         this.config = conf;
-        this.init(this, this.config);
+        this.init(this, conf);
     }
+    public static void main(String[] args) {
+        // String apiKey = System.getenv("BINANCE_API_KEY");
+        // String secret = System.getenv("BINANCE_API_SECRET");
 
-    static public void main(String[] args) {
-        String apiKey = System.getenv("BINANCE_API_KEY");
-        String secret = System.getenv("BINANCE_API_SECRET");
 
-        ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(new BinanceConfig(
+        /*ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(new BinanceConfig(
                 true,
                 new BinanceCredentials(
                         apiKey,
                         secret
                 )
-        )));
-        System.out.println("Hello?");
-        try {
-            client.getAllOpenOrders();
-        } catch(RuntimeException e){
-            System.out.println("Hello?");
-        }
+        )));*/
 
+        String apiKey = System.getenv("NASH_API_KEY");
+        String secret = System.getenv("NASH_API_SECRET");
+        NashConfig nashConfig = new NashConfig(
+                new NashCredentials(
+                        secret,
+                        apiKey
+                ),
+                0,
+                "sandbox",
+                10000
+        );
+        ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(nashConfig));
+        Subscription[] subs = new Subscription[]{Subscription.orderbook("btc_usdc", 5)};
+        client.subscribe(subs, new OpenLimitsEventHandler() {
+            @Override
+            public void onPing() {
+                System.out.println("ping");
+            }
+
+            @Override
+            public void onOrderbook(OrderbookResponse orderbook) {
+                System.out.println(orderbook);
+            }
+
+            @Override
+            public void onTrades(Trade[] trades) {
+                System.out.println(Arrays.toString(trades));
+            }
+        });
     }
 }

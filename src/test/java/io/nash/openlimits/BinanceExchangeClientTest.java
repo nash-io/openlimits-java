@@ -49,6 +49,18 @@ public class BinanceExchangeClientTest extends TestCase {
                 "BNBBTC"
         )));
     }
+
+    public void testCancelOrder() {
+        Order order = client.limitSell(new LimitRequest(
+                "0.001",
+                "1",
+                "BNBBTC"
+        ));
+        System.out.println("Cancelling: " + order);
+        System.out.println(
+                client.cancelOrder(new CancelOrderRequest(order.id, "BNBBTC"))
+        );
+    }
     public void testPriceTicker() {
         System.out.println(client.getPriceTicker("BNBBTC"));
     }
@@ -83,17 +95,6 @@ public class BinanceExchangeClientTest extends TestCase {
         System.out.println(Arrays.toString(client.getAccountBalances(null)));
     }
 
-    public void testCancelOrder() {
-        Order order = client.limitSell(new LimitRequest(
-                "0.001",
-                "1",
-                "BNBBTC"
-        ));
-        System.out.println("Cancelling: " + order);
-        System.out.println(
-                client.cancelOrder(new CancelOrderRequest(order.id, "BNBBTC"))
-        );
-    }
 
     public void testCancelAllOrders() {
         client.limitSell(new LimitRequest(

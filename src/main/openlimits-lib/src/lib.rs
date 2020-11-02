@@ -19,7 +19,7 @@ use openlimits::{
     BinanceCredentials,
     BinanceParameters,
   },
-  model::{
+  model::{      
       OrderBookRequest, 
       OrderBookResponse,
       Liquidity,
@@ -45,10 +45,9 @@ use openlimits::{
       Interval,
       Candle,
       Ticker,
-      websocket::Subscription
+      websocket::{Subscription, OpenLimitsWebsocketMessage}
   }
 };
-use std::collections::HashMap;
 use tokio::stream::StreamExt;
 use std::sync::MutexGuard;
 use tokio::sync::mpsc::UnboundedSender;
@@ -129,9 +128,9 @@ fn get_object<'a>(env: &'a JNIEnv, obj: &'a JObject, field: &str, t: &str) -> Re
   }
 }
 
-fn get_object_non_null<'a>(env: &'a JNIEnv, obj: &'a JObject, field: &str, t: &str) -> Result<JObject<'a>, String> {
+fn get_object_not_null<'a>(env: &'a JNIEnv, obj: &'a JObject, field: &str, t: &str) -> Result<JObject<'a>, String> {
   match get_object(env, obj, field, t)? {
-    Some(s) => Ok(s),
+    Some(o) => Ok(o),
     None => Err(format!("Could not find non-null field {}", field))
   }
 }
@@ -356,9 +355,64 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_init(env: JNIEnv, 
   let client_future = OpenLimits::instantiate(init_params.clone());
   let client: AnyExchange = runtime.block_on(client_future);
 
+  env.set_rust_field(cli, "_config", init_params).unwrap();
   env.set_rust_field(cli, "_client", client).unwrap();
   env.set_rust_field(cli, "_runtime", runtime).unwrap();
-  return 1
+  1
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_subscribe(env: JNIEnv, _class: JClass,  cli: JObject, subs: JObject, handler: JObject) -> jint {
+  let jvm = env.get_java_vm().expect("Failed to get java VM");
+
+  let init_params: MutexGuard<InitAnyExchange> = env.get_rust_field(cli, "_config").unwrap();
+  let init_params = init_params.clone();
+  let subs = get_subscriptions(&env, &subs).expect("Failed to convert subscriptions");
+  let handler = env.new_global_ref(handler).expect("Failed to create global ref");
+  std::thread::spawn(move || {
+    let subs = subs;
+    let init_params = init_params.clone();
+    let env = jvm.attach_current_thread().expect("Failed to attach thread");
+
+    let handler = handler.as_obj();
+    let mut rt = tokio::runtime::Builder::new()
+                .basic_scheduler()
+                .enable_all()
+                .build().expect("Could not create Tokio runtime");
+    let mut client: OpenLimitsWs<AnyWsExchange> = rt.block_on(OpenLimitsWs::instantiate(init_params));
+
+
+    for sub in subs {
+      rt.block_on(client.subscribe(sub));
+    }
+    loop {
+      let msg = match rt.block_on(client.next()) {
+        Some(Ok(msg)) => msg,
+        Some(Err(e)) => panic!(e),
+        None => {
+          continue;
+        }
+      };
+      match msg {
+        OpenLimitsWebsocketMessage::OrderBook(orderbook) => {
+          match orderbook_resp_to_jobject(&env, orderbook) {
+            Ok(orderbook) => {
+              env.call_method(handler, "onOrderbook", "(Lio/nash/openlimits/OrderbookResponse;)V", &[orderbook.into()]);
+            },
+            Err(e) => {
+              println!("Failed to parse orderbookmessage: {}", e);
+            }
+          }
+        },
+        msg => {
+          println!("Ignoring {:?}", msg);
+        }
+      };
+    }
+  });
+
+
+  1
 }
 
 #[no_mangle]
@@ -563,7 +617,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_receivePairs(env: 
 }
 
 
-
 fn get_paginator(
   env: &JNIEnv,
   paginator: &JObject
@@ -608,7 +661,39 @@ fn interval_from_string(
   }
 }
 
+fn map_err(e: jni::errors::Error) -> String {
+  format!("{}", e)
+}
 
+fn get_subscriptions(
+  env: &JNIEnv,
+  subs: &JObject
+) -> Result<Vec<Subscription>, String> {
+  let arr = subs.into_inner();
+  let len = env.get_array_length(arr).map_err(map_err)?;
+  let mut out: Vec<Subscription> = Vec::new();
+  for i in 0..len {
+    let sub = env.get_object_array_element(arr, i).map_err(map_err)?;
+    out.push(get_subscription(env, &sub)?);
+  }
+  Ok(out)
+}
+
+fn get_subscription(
+  env: &JNIEnv,
+  sub: &JObject
+) -> Result<Subscription, String> {
+  
+  match get_string_non_null(env, sub, "tag")?.as_str() {
+    "OrderBook" => {
+      let market = get_string_non_null(env, sub, "market")?;
+      let depth = env.get_field(*sub, "depth", "J").map_err(map_err)?.j().map_err(map_err)?;
+      
+      Ok(Subscription::OrderBook(market, depth))
+    },
+    s => panic!("Invalid subscription type {}", s)
+  }
+}
 fn get_cancel_order_request(
   env: &JNIEnv,
   req: &JObject
