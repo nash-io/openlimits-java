@@ -369,6 +369,7 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_subscribe(env: JNI
   let init_params = init_params.clone();
   let subs = get_subscriptions(&env, &subs).expect("Failed to convert subscriptions");
   let handler = env.new_global_ref(handler).expect("Failed to create global ref");
+
   std::thread::spawn(move || {
     let subs = subs;
     let init_params = init_params.clone();
@@ -394,6 +395,17 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_subscribe(env: JNI
         }
       };
       match msg {
+        OpenLimitsWebsocketMessage::Trades(trades) => {
+          let out = vec_to_jobject(&env, "Lio/nash/openlimits/Trade;", trades, trade_to_jobject);
+          match out {
+            Ok(trades) => {
+              env.call_method(handler, "onTrades", "([Lio/nash/openlimits/Trade;)V", &[trades.into()]);
+            },
+            Err(e) => {
+              println!("Failed to parse orderbookmessage: {}", e);
+            }
+          }
+        },
         OpenLimitsWebsocketMessage::OrderBook(orderbook) => {
           match orderbook_resp_to_jobject(&env, orderbook) {
             Ok(orderbook) => {
@@ -688,8 +700,11 @@ fn get_subscription(
     "OrderBook" => {
       let market = get_string_non_null(env, sub, "market")?;
       let depth = env.get_field(*sub, "depth", "J").map_err(map_err)?.j().map_err(map_err)?;
-      
       Ok(Subscription::OrderBook(market, depth))
+    },
+    "Trade" => {
+      let market = get_string_non_null(env, sub, "market")?;
+      Ok(Subscription::Trade(market))
     },
     s => panic!("Invalid subscription type {}", s)
   }

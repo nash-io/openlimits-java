@@ -122,18 +122,8 @@ public class ExchangeClient {
         Subscription[] subs = new Subscription[]{Subscription.orderbook("btc_usdc", 5)};
         client.subscribe(subs, new OpenLimitsEventHandler() {
             @Override
-            public void onPing() {
-                System.out.println("ping");
-            }
-
-            @Override
             public void onOrderbook(OrderbookResponse orderbook) {
                 System.out.println(orderbook);
-            }
-
-            @Override
-            public void onTrades(Trade[] trades) {
-                System.out.println(Arrays.toString(trades));
             }
         });
     }

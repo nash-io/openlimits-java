@@ -14,4 +14,7 @@ public class Subscription {
     public static Subscription orderbook(String market, long depth) {
         return new Subscription("OrderBook", market, depth);
     }
+    public static Subscription trade(String market, long depth) {
+        return new Subscription("Trade", market, depth);
+    }
 }
