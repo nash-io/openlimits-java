@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 tokio = { version = "0.2.22", features = ["full"] }
+chrono = { version = "0.4.11" }
 futures-util = "0.3"
 jni = "0.18.0"
 rust_decimal = "1.7.0"

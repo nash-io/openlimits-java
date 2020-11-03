@@ -4,7 +4,7 @@ use jni::objects::{JClass, JValue, JObject, JString};
 use jni::sys::{jsize, jobject};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 use rust_decimal::prelude::*;
-
+use chrono::Duration;
 use openlimits::{
   exchange::{OpenLimits, ExchangeAccount, ExchangeMarketData}, 
   exchange_ws::OpenLimitsWs, 
@@ -28,6 +28,7 @@ use openlimits::{
       CancelOrderRequest,
       OrderType,
       AskBid,
+      TimeInForce,
       OpenLimitOrderRequest,
       OrderStatus,
       OpenMarketOrderRequest,
@@ -899,6 +900,18 @@ fn get_options_nash_credentials(
   }).transpose()
 }
 
+fn string_to_time_in_force(
+  time_in_force_str: &str,
+  time_in_force_ms: i64
+) -> Result<TimeInForce, String> {
+  match time_in_force_str {
+    "GTC" => Ok(TimeInForce::GoodTillCancelled),
+    "GTT" => Ok(TimeInForce::GoodTillTime(Duration::milliseconds(time_in_force_ms))),
+    "IOC" => Ok(TimeInForce::ImmediateOrCancelled),
+    "FOK" => Ok(TimeInForce::FillOrKill),
+    s => Err(format!("Invalid TimeInForce string {}", s))
+  }
+}
 
 fn get_limit_request(
   env: &JNIEnv,
@@ -906,13 +919,16 @@ fn get_limit_request(
 ) -> Result<OpenLimitOrderRequest, String> {
   let size = get_string_non_null(env, req, "size")?;
   let price = get_string_non_null(env, req, "price")?;
+  let time_in_force = get_string_non_null(env, req, "timeInForce")?;
+  let time_in_force_time = get_long_default_with_default(env, req, "timeInForceDurationMs", 0)?;
+  let time_in_force = string_to_time_in_force(time_in_force.as_str(), time_in_force_time as i64)?;
   let market_pair = get_string_non_null(env, req, "market")?;
   let size = Decimal::from_str(size.as_str()).map_err(|e|e.to_string())?;
   let price = Decimal::from_str(price.as_str()).map_err(|e|e.to_string())?;
-
   Ok(
     OpenLimitOrderRequest {
       size,
+      time_in_force,
       price,
       market_pair,
     }

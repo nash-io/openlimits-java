@@ -24,14 +24,21 @@ public class BinanceExchangeClientTest extends TestCase {
         System.out.println(client.orderBook("BNBBTC"));
     }
     public void testLimitBuy() {
-        System.out.println(client.limitBuy(new LimitRequest(
+        System.out.println(client.limitBuy(LimitRequest.goodTillCancelled(
                 "0.001",
                 "1",
                 "BNBBTC"
         )));
     }
-    public void testLimitSell() {
-        System.out.println(client.limitSell(new LimitRequest(
+    public void testLimitBuyIOC() {
+        System.out.println(client.limitBuy(LimitRequest.immediateOrCancel(
+                "0.001",
+                "1",
+                "BNBBTC"
+        )));
+    }
+    public void testLimitBuyFOK() {
+        System.out.println(client.limitBuy(LimitRequest.fillOrKill(
                 "0.001",
                 "1",
                 "BNBBTC"
@@ -51,7 +58,7 @@ public class BinanceExchangeClientTest extends TestCase {
     }
 
     public void testCancelOrder() {
-        Order order = client.limitSell(new LimitRequest(
+        Order order = client.limitSell(LimitRequest.goodTillCancelled(
                 "0.001",
                 "1",
                 "BNBBTC"
@@ -76,7 +83,7 @@ public class BinanceExchangeClientTest extends TestCase {
         ))));
     }
     public void testGetOrder() {
-        Order order = client.limitSell(new LimitRequest(
+        Order order = client.limitSell(LimitRequest.goodTillCancelled(
                 "0.001",
                 "1",
                 "BNBBTC"
@@ -97,12 +104,12 @@ public class BinanceExchangeClientTest extends TestCase {
 
 
     public void testCancelAllOrders() {
-        client.limitSell(new LimitRequest(
+        client.limitSell(LimitRequest.goodTillCancelled(
                 "0.001",
                 "1",
                 "BNBBTC"
         ));
-        client.limitSell(new LimitRequest(
+        client.limitSell(LimitRequest.goodTillCancelled(
                 "0.001",
                 "1",
                 "BNBBTC"
