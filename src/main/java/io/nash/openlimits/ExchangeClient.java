@@ -12,6 +12,10 @@ public class ExchangeClient {
     private long _config;
     private long _client;
     private long _runtime;
+    private long _sub_tx;
+    private long _handler_tx;
+    private OpenLimitsEventHandler eventHandler = null;
+
     native private OrderbookResponse orderBook(ExchangeClient client, String market);
     native private Ticker getPriceTicker(ExchangeClient client, String market);
     native private Candle[] getHistoricRates(ExchangeClient client, GetHistoryRatesRequest request);
@@ -28,18 +32,21 @@ public class ExchangeClient {
 
     native private OrderCanceled cancelOrder(ExchangeClient client, CancelOrderRequest req);
     native private OrderCanceled[] cancelAllOrders(ExchangeClient client, CancelAllOrdersRequest req);
+    native private void setSubscriptionCallback(ExchangeClient client);
 
     native private MarketPair[] receivePairs(ExchangeClient client);
 
 
-    native private int subscribe(ExchangeClient client, Subscription[] subscriptions, OpenLimitsEventHandler handler);
+    native private void subscribe(ExchangeClient client, Subscription subscription);
 
-    native private int init(ExchangeClient client, ExchangeClientConfig conf);
-    public void subscribe(Subscription[] subscriptions, OpenLimitsEventHandler handler) {
-        this.subscribe(this, subscriptions, handler);
+    native private void init(ExchangeClient client, ExchangeClientConfig conf);
+    public void subscribe(Subscription subscription) {
+        this.subscribe(this, subscription);
     }
 
-    public void subscribe(OpenLimitsEventHandler handler){
+    public void setSubscriptionCallback(OpenLimitsEventHandler handler) {
+        this.eventHandler = handler;
+        this.setSubscriptionCallback(this);
     }
 
     public Order limitBuy(LimitRequest request) {
@@ -119,12 +126,13 @@ public class ExchangeClient {
                 10000
         );
         ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(nashConfig));
-        Subscription[] subs = new Subscription[]{Subscription.orderbook("btc_usdc", 5)};
-        client.subscribe(subs, new OpenLimitsEventHandler() {
+        client.setSubscriptionCallback(new OpenLimitsEventHandler() {
             @Override
             public void onOrderbook(OrderbookResponse orderbook) {
                 System.out.println(orderbook);
             }
         });
+        client.subscribe(Subscription.orderbook("btc_usdc", 5));
+
     }
 }

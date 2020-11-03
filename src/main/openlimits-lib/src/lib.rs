@@ -1,7 +1,7 @@
 use jni;
 use jni::{errors, JNIEnv};
 use jni::objects::{JClass, JValue, JObject, JString};
-use jni::sys::{jsize, jobject, jint};
+use jni::sys::{jsize, jobject};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 use rust_decimal::prelude::*;
 
@@ -48,11 +48,34 @@ use openlimits::{
       websocket::{Subscription, OpenLimitsWebsocketMessage}
   }
 };
+use futures_util::future::{select, Either};
 use tokio::stream::StreamExt;
 use std::sync::MutexGuard;
 
+fn map_err(e: jni::errors::Error) -> String {
+  format!("{}", e)
+}
+
+static EVENT_HANDLER_CLS_NAME: &str = "Lio/nash/openlimits/OpenLimitsEventHandler;";
+static ASK_BID_CLS_NAME: &str = "Lio/nash/openlimits/AskBid;";
+static BALANCE_CLS_NAME: &str = "Lio/nash/openlimits/Balance;";
+static BINANCE_CONFIG_CLS_NAME: &str = "Lio/nash/openlimits/BinanceConfig;";
+static BINANCE_CREDENTIALS_CLS_NAME: &str = "Lio/nash/openlimits/BinanceCredentials;";
+static CANDLE_CLS_NAME: &str = "Lio/nash/openlimits/Candle;";
+static MARKET_PAIR_CLS_NAME: &str = "Lio/nash/openlimits/MarketPair;";
+static NASH_CONFIG_CLS_NAME: &str = "Lio/nash/openlimits/NashConfig;";
+static NASH_CREDENTIALS_CLS_NAME: &str = "Lio/nash/openlimits/NashCredentials;";
+static ORDER_CLS_NAME: &str = "Lio/nash/openlimits/Order;";
+static ORDERBOOK_RESPONSE_CLS_NAME: &str = "Lio/nash/openlimits/OrderbookResponse;";
+static ORDER_CANCELED_CLS_NAME: &str = "Lio/nash/openlimits/OrderCanceled;";
+static PAGINATOR_CLS_NAME: &str = "Lio/nash/openlimits/Paginator;";
+static TICKER_CLS_NAME: &str = "Lio/nash/openlimits/Ticker;";
+static TRADE_CLS_NAME: &str = "Lio/nash/openlimits/Trade;";
+
+static STRING_CLS_NAME: &str = "Ljava/lang/String;";
+
 fn decimal_to_jvalue<'a>(_env: &JNIEnv<'a>, s: Decimal) -> errors::Result<JValue<'a>> {
-  Ok(JValue::Float(s.to_f32().unwrap()))
+  Ok(JValue::Float(s.to_f32().unwrap_or_default()))
 }
 
 fn get_field<'a>(
@@ -77,7 +100,7 @@ fn get_field<'a>(
 }
 
 fn get_string(env: &JNIEnv, obj: &JObject, field: &str) -> Result<Option<String>, String> {
-  let value = get_field(env, obj, field, "Ljava/lang/String;")?;
+  let value = get_field(env, obj, field, STRING_CLS_NAME)?;
   match value {
       Some(value) => {
           let string: JString = value
@@ -142,7 +165,7 @@ fn get_long_default_with_default(
 
 
 fn bidask_to_jobject<'a>(env: &JNIEnv<'a>, resp: AskBid) -> errors::Result<JObject<'a>> {
-  let cls_bidask = env.find_class("Lio/nash/openlimits/AskBid;")?;
+  let cls_bidask = env.find_class(ASK_BID_CLS_NAME)?;
 
   let ctor_args = &[
     decimal_to_jvalue(env, resp.price)?,
@@ -161,10 +184,10 @@ fn vec_to_java_arr<'a>(env: &JNIEnv<'a>, cls: JClass, v: &Vec<JObject<'a>>) -> e
 }
 
 fn orderbook_resp_to_jobject<'a>(env: &JNIEnv<'a>, resp: OrderBookResponse) -> errors::Result<JObject<'a>> {
-  let cls_resp = env.find_class("Lio/nash/openlimits/OrderbookResponse;").expect("Failed to find OrderbookResponse class");
+  let cls_resp = env.find_class(ORDERBOOK_RESPONSE_CLS_NAME)?;
 
-  let asks = vec_to_jobject(env, "Lio/nash/openlimits/AskBid;", resp.asks, bidask_to_jobject)?;
-  let bids = vec_to_jobject(env, "Lio/nash/openlimits/AskBid;", resp.bids, bidask_to_jobject)?;
+  let asks = vec_to_jobject(env, ASK_BID_CLS_NAME, resp.asks, bidask_to_jobject)?;
+  let bids = vec_to_jobject(env, ASK_BID_CLS_NAME, resp.bids, bidask_to_jobject)?;
 
   let ctor_args = &[
     asks.into(),
@@ -176,7 +199,7 @@ fn orderbook_resp_to_jobject<'a>(env: &JNIEnv<'a>, resp: OrderBookResponse) -> e
 
 
 fn candle_to_jobject<'a>(env: &JNIEnv<'a>, candle: Candle) -> errors::Result<JObject<'a>> {
-  let cls_candle = env.find_class("Lio/nash/openlimits/Candle;").expect("Failed to find Candle class");
+  let cls_candle = env.find_class(CANDLE_CLS_NAME)?;
   
   let ctor_args = &[
     JValue::Long(candle.time as i64),
@@ -201,12 +224,12 @@ fn side_to_string<'a>(env: &JNIEnv<'a>, s: Side) -> errors::Result<JString<'a>> 
   };
   string_to_jstring(env, String::from(s))
 }
-fn liquidity_to_string<'a>(env: &JNIEnv<'a>, s: Liquidity) -> errors::Result<JString<'a>> {
+fn liquidity_to_string<'a>(env: &JNIEnv<'a>, s: Liquidity) -> errors::Result<JObject<'a>> {
   let s = match s {
     Liquidity::Maker => "Maker",
     Liquidity::Taker => "Taker",
   };
-  string_to_jstring(env, String::from(s))
+  Ok(string_to_jstring(env, String::from(s))?.into())
 }
 
 fn string_option_to_null(v: Option<JString>) -> JValue {
@@ -218,17 +241,16 @@ fn string_option_to_null(v: Option<JString>) -> JValue {
 
 
 fn trade_to_jobject<'a>(env: &JNIEnv<'a>, trade: Trade) -> errors::Result<JObject<'a>> {
-  let cls_trade = env.find_class("Lio/nash/openlimits/Trade;").expect("Failed to find Trade class");
-  
+  let cls_trade = env.find_class(TRADE_CLS_NAME)?;
   let ctor_args = &[
     env.new_string(trade.id)?.into(),
     env.new_string(trade.order_id)?.into(),
     env.new_string(trade.market_pair)?.into(),
     decimal_to_jvalue(env, trade.price)?,
     decimal_to_jvalue(env, trade.qty)?,
-    trade.fees.map_or(JValue::Float(0.0), |f| decimal_to_jvalue(env, f).expect("Failed to convert fees to float")),
+    trade.fees.map_or(Ok(JValue::Float(0.0)), |f| decimal_to_jvalue(env, f))?,
     side_to_string(env, trade.side)?.into(),
-    trade.liquidity.map_or(JValue::Object(JObject::null()), |l| liquidity_to_string(env, l).expect("Failed to convert liquidity to string").into()),
+    trade.liquidity.map_or(Ok(JObject::null()), |l| liquidity_to_string(env, l))?.into(),
     JValue::Long(trade.created_at as i64)
   ];
 
@@ -236,7 +258,7 @@ fn trade_to_jobject<'a>(env: &JNIEnv<'a>, trade: Trade) -> errors::Result<JObjec
 }
 
 fn ticker_to_jobject<'a>(env: &JNIEnv<'a>, resp: Ticker) -> errors::Result<JObject<'a>> {
-  let cls_resp = env.find_class("Lio/nash/openlimits/Ticker;").expect("Failed to find Ticker class");
+  let cls_resp = env.find_class(TICKER_CLS_NAME)?;
   let ctor_args = &[
     decimal_to_jvalue(env, resp.price)?
   ];
@@ -268,7 +290,7 @@ fn order_status_to_string(typ: OrderStatus) -> &'static str {
 }
 
 fn order_to_jobject<'a>(env: &JNIEnv<'a>, order: Order) -> errors::Result<JObject<'a>> {
-  let cls_resp = env.find_class("Lio/nash/openlimits/Order;").expect("Failed to find Order class");
+  let cls_resp = env.find_class(ORDER_CLS_NAME)?;
   let ctor_args = &[
     env.new_string(order.id)?.into(),
     env.new_string(order.market_pair)?.into(),
@@ -295,7 +317,7 @@ fn vec_to_jobject<'a, T, F>(env: &JNIEnv<'a>, cls: &str, entries: Vec<T>, f: F) 
 
 
 fn order_cancelled_to_jobject<'a>(env: &JNIEnv<'a>, order: OrderCanceled) -> errors::Result<JObject<'a>> {
-  let cls_resp = env.find_class("Lio/nash/openlimits/OrderCanceled;").expect("Failed to find OrderCanceled class");
+  let cls_resp = env.find_class(ORDER_CANCELED_CLS_NAME)?;
   let ctor_args = &[
     env.new_string(order.id)?.into(),
   ];
@@ -303,7 +325,7 @@ fn order_cancelled_to_jobject<'a>(env: &JNIEnv<'a>, order: OrderCanceled) -> err
 }
 
 fn balance_to_jobject<'a>(env: &JNIEnv<'a>, balance: Balance) -> errors::Result<JObject<'a>> {
-  let cls_resp = env.find_class("Lio/nash/openlimits/Balance;").expect("Failed to find Balance class");
+  let cls_resp = env.find_class(BALANCE_CLS_NAME)?;
   let ctor_args = &[
     env.new_string(balance.asset)?.into(),
     env.new_string(balance.total.to_string())?.into(),
@@ -314,7 +336,7 @@ fn balance_to_jobject<'a>(env: &JNIEnv<'a>, balance: Balance) -> errors::Result<
 }
 
 fn market_pair_to_jobject<'a>(env: &JNIEnv<'a>, pair: MarketPair) -> errors::Result<JObject<'a>> {
-  let cls_resp = env.find_class("Lio/nash/openlimits/MarketPair;").expect("Failed to find MarketPair class");
+  let cls_resp = env.find_class(MARKET_PAIR_CLS_NAME)?;
 
   let ctor_args = &[
     env.new_string(pair.base)?.into(),
@@ -327,95 +349,154 @@ fn market_pair_to_jobject<'a>(env: &JNIEnv<'a>, pair: MarketPair) -> errors::Res
   env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", ctor_args)
 }
 
-// This keeps Rust from "mangling" the name and making it unique for this crate.
+enum SubthreadCmd {
+  Sub(Subscription),
+  SetEventHandler
+}
+
 #[no_mangle]
-pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_init(env: JNIEnv, _class: JClass, cli: JObject, conf: JObject) -> jint {
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_init(env: JNIEnv, _class: JClass, cli: JObject, conf: JObject) {
+  let jvm = env.get_java_vm().expect("Failed to get java VM");
   let init_params = match get_options(&env, &conf) {
     Ok(conf) => conf,
     Err(e) => panic!("invalid config: {}", e)
   };
   
   let mut runtime = tokio::runtime::Builder::new().basic_scheduler().enable_all().build().expect("Failed to create tokio runtime");
+  let ws_params = init_params.clone();
   
   let client_future = OpenLimits::instantiate(init_params.clone());
   let client: AnyExchange = runtime.block_on(client_future);
+  let (sub_request_tx, mut sub_rx) = tokio::sync::mpsc::unbounded_channel::<SubthreadCmd>();
 
   env.set_rust_field(cli, "_config", init_params).unwrap();
   env.set_rust_field(cli, "_client", client).unwrap();
   env.set_rust_field(cli, "_runtime", runtime).unwrap();
-  1
-}
+  env.set_rust_field(cli, "_sub_tx", sub_request_tx).unwrap();
 
-#[no_mangle]
-pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_subscribe(env: JNIEnv, _class: JClass,  cli: JObject, subs: JObject, handler: JObject) -> jint {
-  let jvm = env.get_java_vm().expect("Failed to get java VM");
-
-  let init_params: MutexGuard<InitAnyExchange> = env.get_rust_field(cli, "_config").unwrap();
-  let init_params = init_params.clone();
-  let subs = get_subscriptions(&env, &subs).expect("Failed to convert subscriptions");
-  let handler = env.new_global_ref(handler).expect("Failed to create global ref");
-
+  let client = env.new_global_ref(cli).expect("Failed to create global ref");
   std::thread::spawn(move || {
-    let subs = subs;
-    let init_params = init_params.clone();
     let env = jvm.attach_current_thread().expect("Failed to attach thread");
+    let event_handler_cls = env.find_class(EVENT_HANDLER_CLS_NAME).unwrap();
+    let on_trades = env.get_method_id(event_handler_cls, "onTrades", "([Lio/nash/openlimits/Trade;)V").unwrap();
+    let on_orderbook = env.get_method_id(event_handler_cls, "onOrderbook", "(Lio/nash/openlimits/OrderbookResponse;)V").unwrap();
 
-    let handler = handler.as_obj();
+    let exchange_client_instance = client.as_obj();
     let mut rt = tokio::runtime::Builder::new()
                 .basic_scheduler()
                 .enable_all()
                 .build().expect("Could not create Tokio runtime");
-    let mut client: OpenLimitsWs<AnyWsExchange> = rt.block_on(OpenLimitsWs::instantiate(init_params));
+    let mut client: OpenLimitsWs<AnyWsExchange> = rt.block_on(OpenLimitsWs::instantiate(ws_params.clone()));
+    let mut handler_instance = get_object(&env, &exchange_client_instance, "eventHandler", EVENT_HANDLER_CLS_NAME).expect("Class has no event handler field").map(
+      |inst| env.new_global_ref(inst).expect("Failed to create global ref")
+    );
 
-
-    for sub in subs {
-      rt.block_on(client.subscribe(sub)).expect("Failed to set up subscription");
-    }
     loop {
-      let msg = match rt.block_on(client.next()) {
-        Some(Ok(msg)) => msg,
-        Some(Err(e)) => panic!(e),
-        None => {
-          continue;
-        }
-      };
-     
-      match msg {
-        OpenLimitsWebsocketMessage::Trades(trades) => {
-          match vec_to_jobject(&env, "Lio/nash/openlimits/Trade;", trades, trade_to_jobject) {
-            Ok(trades) => {
-              let res = env.call_method(handler, "onTrades", "([Lio/nash/openlimits/Trade;)V", &[trades.into()]);
-              if res.is_err() {
-                println!("Failed to do callback: {}", res.err().unwrap());
-              }
+      let subcmd = sub_rx.next();
+      let msg = client.next();
+      let combined = select(subcmd, msg);
+
+      let next_msg = rt.block_on(combined);
+
+      match next_msg {
+        Either::Left((thread_cmd, _)) => {
+          match thread_cmd {
+            Some(SubthreadCmd::SetEventHandler) => {
+              handler_instance = get_object(&env, &exchange_client_instance, "eventHandler", EVENT_HANDLER_CLS_NAME).expect("Class has no event handler field").map(
+                |inst| env.new_global_ref(inst).expect("Failed to create global ref")
+              );
             },
-            Err(e) => {
-              println!("failed to conert object: {}", e);
+            Some(SubthreadCmd::Sub(sub)) => {
+              match rt.block_on(client.subscribe(sub.clone())) {
+                Ok(_) => {
+                  println!("Subscribed to {:?}", sub);
+                },
+                Err(msg) => {
+                  println!("Failed to subscribe: {}", msg);
+                }
+              };
+            },
+            None => {}
+          }
+        },
+        Either::Right((sub_msg, _)) => {
+          let handler = match handler_instance {
+            None => continue,
+            Some(ref handler) => handler.as_obj()
+          };
+          
+          let msg = match sub_msg {
+            Some(Ok(msg)) => msg,
+            Some(Err(e)) => panic!(e),
+            None => {
+              continue;
+            }
+          };
+          
+          match msg {
+            OpenLimitsWebsocketMessage::Trades(trades) => {
+              match vec_to_jobject(&env, TRADE_CLS_NAME, trades, trade_to_jobject) {
+                Ok(trades) => {
+                  let res =env.call_method_unchecked(
+                    handler,
+                    on_trades,
+                    jni::signature::JavaType::Primitive(jni::signature::Primitive::Void),
+                    &[trades.into()]
+                  );
+
+                  if res.is_err() {
+                    println!("Failed to do callback: {}", res.err().unwrap());
+                  }
+                },
+                Err(e) => {
+                  println!("failed to conert object: {}", e);
+                }
+              };
+            },
+            OpenLimitsWebsocketMessage::OrderBook(orderbook) => {
+              match orderbook_resp_to_jobject(&env, orderbook) {
+                Ok(orderbook) => {
+                  let res =env.call_method_unchecked(
+                    handler,
+                    on_orderbook,
+                    jni::signature::JavaType::Primitive(jni::signature::Primitive::Void),
+                    &[orderbook.into()]
+                  );
+
+                  if res.is_err() {
+                    println!("Failed to do callback: {}", res.err().unwrap());
+                  }
+                },
+                Err(e) => {
+                  println!("failed to conert object: {}", e);
+                }
+              };
+            },
+            msg => {
+              println!("Unknown message: {:?}", msg);
             }
           };
         },
-        OpenLimitsWebsocketMessage::OrderBook(orderbook) => {
-          match orderbook_resp_to_jobject(&env, orderbook) {
-            Ok(orderbook) => {
-              let res = env.call_method(handler, "onOrderbook", "(Lio/nash/openlimits/OrderbookResponse;)V", &[orderbook.into()]);
-              if res.is_err() {
-                println!("Failed to do callback: {}", res.err().unwrap());
-              }
-            },
-            Err(e) => {
-              println!("failed to conert object: {}", e);
-            }
-          };
-        },
-        msg => {
-          println!("Unknown message: {:?}", msg);
-        }
-      };
+      }
     }
   });
-
-
-  1
+}
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_subscribe(env: JNIEnv, _class: JClass,  cli: JObject, sub: JObject) {
+  let sub_request_tx: MutexGuard<tokio::sync::mpsc::UnboundedSender<SubthreadCmd>> = env.get_rust_field(cli, "_sub_tx").expect("Failed to get sub channel");
+  let sub = get_subscription(&env, &sub).expect("Failed to create subscription");
+  match sub_request_tx.send(SubthreadCmd::Sub(sub)) {
+    Err(_) => println!("Failed to send subscribe cmd"),
+    Ok(_) => {}
+  }
+}
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_setSubscriptionCallback(env: JNIEnv, _class: JClass,  cli: JObject) {
+  let sub_request_tx: MutexGuard<tokio::sync::mpsc::UnboundedSender<SubthreadCmd>> = env.get_rust_field(cli, "_sub_tx").expect("Failed to get sub channel");
+  match sub_request_tx.send(SubthreadCmd::SetEventHandler) {
+    Err(_) => println!("Failed to send SetEventHandler cmd"),
+    Ok(_) => {}
+  }
 }
 
 #[no_mangle]
@@ -457,7 +538,7 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getHistoricRates(e
   let req = get_historic_rates_request(&env, &hist_req).expect("Failed to parse params");
 
   let resp = runtime.block_on(client.get_historic_rates(&req)).expect("Failed to get response");
-  let out = vec_to_jobject(&env, "Lio/nash/openlimits/Candle;", resp, candle_to_jobject).expect("Failed to convert result to Java");
+  let out = vec_to_jobject(&env, CANDLE_CLS_NAME, resp, candle_to_jobject).expect("Failed to convert result to Java");
   out.into_inner()
 }
 
@@ -470,7 +551,7 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getHistoricTrades(
   let req = get_historic_trades_request(&env, &trades_req).expect("Failed to parse params");
 
   let resp = runtime.block_on(client.get_historic_trades(&req)).expect("Failed to get response");
-  let out = vec_to_jobject(&env, "Lio/nash/openlimits/Trade;", resp, trade_to_jobject).expect("Failed to convert result to Java");
+  let out = vec_to_jobject(&env, TRADE_CLS_NAME, resp, trade_to_jobject).expect("Failed to convert result to Java");
   out.into_inner()
 }
 
@@ -526,7 +607,7 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getAllOpenOrders(e
 
   let resp = runtime.block_on(client.get_all_open_orders()).expect("Failed to get response");
 
-  let out = vec_to_jobject(&env, "Lio/nash/openlimits/Order;", resp, order_to_jobject).expect("Failed to convert result to Java");
+  let out = vec_to_jobject(&env, ORDER_CLS_NAME, resp, order_to_jobject).expect("Failed to convert result to Java");
   out.into_inner()
 }
 
@@ -537,7 +618,7 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getOrderHistory(en
   let req = get_order_history_request(&env, &req).expect("Failed to parse params");
 
   let resp = runtime.block_on(client.get_order_history(&req)).expect("Failed to get response");
-  let out = vec_to_jobject(&env, "Lio/nash/openlimits/Order;", resp, order_to_jobject).expect("Failed to convert result to Java");
+  let out = vec_to_jobject(&env, ORDER_CLS_NAME, resp, order_to_jobject).expect("Failed to convert result to Java");
   out.into_inner()
 }
 
@@ -559,7 +640,7 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getTradeHistory(en
   let req = get_trade_history_request(&env, &req).expect("Failed to parse params");
 
   let resp = runtime.block_on(client.get_trade_history(&req)).expect("Failed to get response");
-  let out = vec_to_jobject(&env, "Lio/nash/openlimits/Trade;", resp, trade_to_jobject).expect("Failed to convert result to Java");
+  let out = vec_to_jobject(&env, TRADE_CLS_NAME, resp, trade_to_jobject).expect("Failed to convert result to Java");
   out.into_inner()
 }
 
@@ -574,7 +655,7 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getAccountBalances
   let paginator = req.transpose().expect("Invalid paginator object");
 
   let resp = runtime.block_on(client.get_account_balances(paginator)).expect("Failed to get response");
-  let out = vec_to_jobject(&env, "Lio/nash/openlimits/Balance;", resp, balance_to_jobject).expect("Failed to convert result to Java");
+  let out = vec_to_jobject(&env, BALANCE_CLS_NAME, resp, balance_to_jobject).expect("Failed to convert result to Java");
   out.into_inner()
 }
 
@@ -599,7 +680,7 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_cancelAllOrders(en
 
   let resp = runtime.block_on(client.cancel_all_orders(&req)).expect("Failed to get response");
 
-  let out = vec_to_jobject(&env, "Lio/nash/openlimits/OrderCanceled;", resp, order_cancelled_to_jobject).expect("Failed to convert result to Java");
+  let out = vec_to_jobject(&env, ORDER_CANCELED_CLS_NAME, resp, order_cancelled_to_jobject).expect("Failed to convert result to Java");
   out.into_inner()
 }
 
@@ -613,12 +694,13 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_receivePairs(env: 
   let resp = runtime.block_on(client.retrieve_pairs()).expect("Failed to get response");
   let pairs_maybe: errors::Result<Vec<_>> = resp.into_iter().map(|v| market_pair_to_jobject(&env, v)).collect();
   let pairs = pairs_maybe.expect("Failed to convert Pairs to Java");
-  let pairs_cls = env.find_class("Lio/nash/openlimits/MarketPair;").expect("Can't find MarketPair Class");
+  let pairs_cls = env.find_class(MARKET_PAIR_CLS_NAME).expect("Can't find MarketPair Class");
 
   let out = vec_to_java_arr(&env, pairs_cls, &pairs).expect("Failed to convert vec to array");
   out.l().expect("failed to convert out array to object").into_inner()
 }
 
+/// jobject to openlimits
 
 fn get_paginator(
   env: &JNIEnv,
@@ -664,23 +746,6 @@ fn interval_from_string(
   }
 }
 
-fn map_err(e: jni::errors::Error) -> String {
-  format!("{}", e)
-}
-
-fn get_subscriptions(
-  env: &JNIEnv,
-  subs: &JObject
-) -> Result<Vec<Subscription>, String> {
-  let arr = subs.into_inner();
-  let len = env.get_array_length(arr).map_err(map_err)?;
-  let mut out: Vec<Subscription> = Vec::new();
-  for i in 0..len {
-    let sub = env.get_object_array_element(arr, i).map_err(map_err)?;
-    out.push(get_subscription(env, &sub)?);
-  }
-  Ok(out)
-}
 
 fn get_subscription(
   env: &JNIEnv,
@@ -736,7 +801,7 @@ fn get_historic_trades_request(
 ) -> Result<GetHistoricTradesRequest, String> {
   let market_pair = get_string_non_null(env, trades_req, "market")?;
 
-  let paginator = get_object(env, trades_req, "paginator", "Lio/nash/openlimits/Paginator;")?;
+  let paginator = get_object(env, trades_req, "paginator", PAGINATOR_CLS_NAME)?;
   let paginator = paginator.map(|paginator| get_paginator(env, &paginator)).transpose()?;
 
   Ok(
@@ -753,7 +818,7 @@ fn get_order_history_request(
 ) -> Result<GetOrderHistoryRequest, String> {
   let market_pair = get_string(env, req, "market")?;
 
-  let paginator = get_object(env, req, "paginator", "Lio/nash/openlimits/Paginator;")?;
+  let paginator = get_object(env, req, "paginator", PAGINATOR_CLS_NAME)?;
   let paginator = paginator.map(|paginator| get_paginator(env, &paginator)).transpose()?;
 
   Ok(
@@ -785,7 +850,7 @@ fn get_trade_history_request(
 ) -> Result<TradeHistoryRequest, String> {
   let market_pair = get_string(env, hist_req, "market")?;
   let order_id = get_string(env, hist_req, "orderId")?;
-  let paginator = get_object(env, hist_req, "paginator", "Lio/nash/openlimits/Paginator;")?;
+  let paginator = get_object(env, hist_req, "paginator", PAGINATOR_CLS_NAME)?;
   let paginator = paginator.map(|paginator| get_paginator(env, &paginator)).transpose()?;
 
   Ok(
@@ -820,7 +885,7 @@ fn get_options_nash_credentials(
   env: &JNIEnv,
   nash: &JObject,
 ) -> Result<Option<NashCredentials>, String> {
-  let credentials = get_object(&env, nash, "credentials",  "Lio/nash/openlimits/NashCredentials;")?;
+  let credentials = get_object(&env, nash, "credentials",  NASH_CREDENTIALS_CLS_NAME)?;
 
   credentials.map(|credentials| {
     let secret = get_string_non_null(&env, &credentials, "secret")?;
@@ -902,7 +967,7 @@ fn get_options_binance_credentials(
   binance: &JObject,
 ) -> Result<Option<BinanceCredentials>, String> {
   
-  let credentials_opt = get_object(&env, binance, "credentials",  "Lio/nash/openlimits/BinanceCredentials;")?;
+  let credentials_opt = get_object(&env, binance, "credentials",  BINANCE_CREDENTIALS_CLS_NAME)?;
 
   credentials_opt.map(|credentials| {
     let api_key = get_string_non_null(&env, &credentials, "apiKey")?;
@@ -936,8 +1001,8 @@ fn get_options(
   env: &JNIEnv,
   opts: &JObject,
 ) -> Result<InitAnyExchange, String> {
-  let nash = get_object(&env, opts, "nash",  "Lio/nash/openlimits/NashConfig;")?;
-  let binance = get_object(&env, opts, "binance",  "Lio/nash/openlimits/BinanceConfig;")?;
+  let nash = get_object(&env, opts, "nash",  NASH_CONFIG_CLS_NAME)?;
+  let binance = get_object(&env, opts, "binance",  BINANCE_CONFIG_CLS_NAME)?;
   match (nash, binance) {
     (Some(nash), _) => get_options_nash(&env, &nash),
     (_, Some(binance)) => get_options_binance(&env, &binance),
