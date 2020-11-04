@@ -12,13 +12,15 @@ public class BinanceExchangeClientTest extends TestCase {
         String apiKey = System.getenv("BINANCE_API_KEY");
         String secret = System.getenv("BINANCE_API_SECRET");
 
-        client = new ExchangeClient(new ExchangeClientConfig(new BinanceConfig(
+        BinanceConfig config = new BinanceConfig(
                 true,
                 new BinanceCredentials(
                         apiKey,
                         secret
                 )
-        )));
+        );
+
+        client = new ExchangeClient(new ExchangeClientConfig(config));
     }
     public void testOrderBook() {
         System.out.println(client.orderBook("BNBBTC"));
@@ -57,7 +59,7 @@ public class BinanceExchangeClientTest extends TestCase {
         )));
     }
 
-    public void testCancelOrder() {
+    /*public void testCancelOrder() {
         Order order = client.limitSell(LimitRequest.goodTillCancelled(
                 "0.001",
                 "1",
@@ -67,7 +69,7 @@ public class BinanceExchangeClientTest extends TestCase {
         System.out.println(
                 client.cancelOrder(new CancelOrderRequest(order.id, "BNBBTC"))
         );
-    }
+    }*/
     public void testPriceTicker() {
         System.out.println(client.getPriceTicker("BNBBTC"));
     }

@@ -29,14 +29,15 @@ public class NashExchangeClientTest extends TestCase {
         System.out.println(client.orderBook("btc_usdc"));
     }
 
+    /*
     public void testPriceTicker() {
         try {
             System.out.println(client.getPriceTicker( "btc_usdc"));
         } catch(RuntimeException e){
             System.out.println("testPriceTicker failed");
         }
-
     }
+    */
 
     public void testGetHistoryRates() {
         System.out.println(Arrays.toString(client.getHistoricRates( new GetHistoryRatesRequest(

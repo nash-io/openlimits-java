@@ -1,22 +1,43 @@
 plugins {
-    id 'java'
+    id 'java-library'
+    id 'maven-publish'
 }
 
 group 'org.example'
-version '1.0-SNAPSHOT'
+version '0.1'
 
 repositories {
     mavenCentral()
 }
 
-task copyNativeDeps(type: Copy) {
-    from "${projectDir}/src/main/openlimits-lib/target/debug/libopenlimits_java.dylib"
-    into 'build/libs'
+task copyNativeDeps {
+    copy {
+        from "${projectDir}/src/main/openlimits-lib/target/release/libopenlimits_java.*"
+        into 'build/libs'
+    }
 }
+
 tasks.withType(Test) {
+    environment("BINANCE_API_KEY", System.getenv('BINANCE_API_KEY'))
+    environment("BINANCE_API_SECRET", System.getenv('BINANCE_API_SECRET'))
+    environment("NASH_API_SECRET", System.getenv('NASH_API_SECRET'))
+    environment("NASH_API_KEY", System.getenv('NASH_API_KEY'))
     systemProperty "java.library.path", "build/libs"
 }
 
 dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.12'
+}
+
+publishing {
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = "https://maven.pkg.github.com/octocat/hello-world"
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
 }

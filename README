@@ -1,0 +1,11 @@
+# OpenLimits Java Wrapper
+
+Starting point for Openlimits wrapper in Java using rust-jni for java-python bindings.
+
+## Build the java package
+
+First make sure rust is installed. Open a terminal. Navigate to the src/main/openlimits-lib, and run `cargo build --release`
+
+Once the rust dependency has been built, navigate back to the root and run `./gradlew build`
+
+You will have the .jar file and shared library in the build/libs folder, which can be used in other projects.

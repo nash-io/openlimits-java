@@ -8,4 +8,12 @@ public class BinanceCredentials {
         this.apiKey = apiKey;
         this.apiSecret = apiSecret;
     }
+
+    @Override
+    public String toString() {
+        return "BinanceCredentials{" +
+                "apiKey='" + apiKey + '\'' +
+                ", apiSecret='" + apiSecret + '\'' +
+                '}';
+    }
 }
