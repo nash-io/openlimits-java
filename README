@@ -9,3 +9,43 @@ First make sure rust is installed. Open a terminal. Navigate to the src/main/ope
 Once the rust dependency has been built, navigate back to the root and run `./gradlew build`
 
 You will have the .jar file and shared library in the build/libs folder, which can be used in other projects.
+
+## Example
+
+```
+package example;
+
+import io.nash.openlimits.*;
+
+public class Example {
+    static {
+        System.loadLibrary("openlimits_java");
+    }
+
+    public static void main(String[] args) {
+        String apiKey = System.getenv("NASH_API_KEY");
+        String secret = System.getenv("NASH_API_SECRET");
+        NashConfig nashConfig = new NashConfig(
+                new NashCredentials(
+                        secret,
+                        apiKey
+                ),
+                0,
+                "sandbox",
+                10000
+        );
+        ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(nashConfig));
+        client.setSubscriptionCallback(new OpenLimitsEventHandler() {
+            @Override
+            public void onOrderbook(OrderbookResponse orderbook) {
+                System.out.println(orderbook);
+            }
+            @Override
+            public void onError() {
+                System.out.println("Got error. Disconnect client");
+            }
+        });
+        client.subscribe(Subscription.orderbook("btc_usdc", 5));
+    }
+}
+```

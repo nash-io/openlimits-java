@@ -1,9 +1,6 @@
 package io.nash.openlimits;
 
 
-import java.lang.reflect.Array;
-import java.util.Arrays;
-
 public class ExchangeClient {
     static {
         System.loadLibrary("openlimits_java");
@@ -38,10 +35,14 @@ public class ExchangeClient {
 
 
     native private void subscribe(ExchangeClient client, Subscription subscription);
+    native private void disconnect(ExchangeClient client);
 
     native private void init(ExchangeClient client, ExchangeClientConfig conf);
     public void subscribe(Subscription subscription) {
         this.subscribe(this, subscription);
+    }
+    public void disconnect() {
+        this.disconnect(this);
     }
 
     public void setSubscriptionCallback(OpenLimitsEventHandler handler) {
@@ -101,19 +102,8 @@ public class ExchangeClient {
         this.config = conf;
         this.init(this, conf);
     }
-    public static void main(String[] args) {
-        // String apiKey = System.getenv("BINANCE_API_KEY");
-        // String secret = System.getenv("BINANCE_API_SECRET");
 
-
-        /*ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(new BinanceConfig(
-                true,
-                new BinanceCredentials(
-                        apiKey,
-                        secret
-                )
-        )));*/
-
+    public static void run(Runnable restart) {
         String apiKey = System.getenv("NASH_API_KEY");
         String secret = System.getenv("NASH_API_SECRET");
         NashConfig nashConfig = new NashConfig(
@@ -125,14 +115,24 @@ public class ExchangeClient {
                 "sandbox",
                 10000
         );
-        ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(nashConfig));
+        final ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(nashConfig));
         client.setSubscriptionCallback(new OpenLimitsEventHandler() {
             @Override
             public void onOrderbook(OrderbookResponse orderbook) {
                 System.out.println(orderbook);
             }
+            @Override
+            public void onError() {
+                System.out.println("Got error. Closing down clients");
+                restart.run();
+            }
         });
         client.subscribe(Subscription.orderbook("btc_usdc", 5));
+    }
 
+    public static void main(String[] args) {
+        run(() -> {
+            main(args);
+        });
     }
 }

@@ -15,6 +15,7 @@ use openlimits::{
     NashParameters,
     Environment
   },
+  errors::OpenLimitError,
   binance::{
     BinanceCredentials,
     BinanceParameters,
@@ -352,42 +353,30 @@ fn market_pair_to_jobject<'a>(env: &JNIEnv<'a>, pair: MarketPair) -> errors::Res
 
 enum SubthreadCmd {
   Sub(Subscription),
-  SetEventHandler
+  SetEventHandler,
+  Disconnect
 }
 
-#[no_mangle]
-pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_init(env: JNIEnv, _class: JClass, cli: JObject, conf: JObject) {
+fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchange) {
   let jvm = env.get_java_vm().expect("Failed to get java VM");
-  let init_params = match get_options(&env, &conf) {
-    Ok(conf) => conf,
-    Err(e) => panic!("invalid config: {}", e)
-  };
+  let client = env.new_global_ref(cli).expect("Failed to create global ref");
   
-  let mut runtime = tokio::runtime::Builder::new().basic_scheduler().enable_all().build().expect("Failed to create tokio runtime");
-  let ws_params = init_params.clone();
-  
-  let client_future = OpenLimits::instantiate(init_params.clone());
-  let client: AnyExchange = runtime.block_on(client_future);
   let (sub_request_tx, mut sub_rx) = tokio::sync::mpsc::unbounded_channel::<SubthreadCmd>();
-
-  env.set_rust_field(cli, "_config", init_params).unwrap();
-  env.set_rust_field(cli, "_client", client).unwrap();
-  env.set_rust_field(cli, "_runtime", runtime).unwrap();
   env.set_rust_field(cli, "_sub_tx", sub_request_tx).unwrap();
 
-  let client = env.new_global_ref(cli).expect("Failed to create global ref");
   std::thread::spawn(move || {
     let env = jvm.attach_current_thread().expect("Failed to attach thread");
     let event_handler_cls = env.find_class(EVENT_HANDLER_CLS_NAME).unwrap();
     let on_trades = env.get_method_id(event_handler_cls, "onTrades", "([Lio/nash/openlimits/Trade;)V").unwrap();
     let on_orderbook = env.get_method_id(event_handler_cls, "onOrderbook", "(Lio/nash/openlimits/OrderbookResponse;)V").unwrap();
+    let on_error = env.get_method_id(event_handler_cls, "onError", "()V").unwrap();
 
     let exchange_client_instance = client.as_obj();
     let mut rt = tokio::runtime::Builder::new()
                 .basic_scheduler()
                 .enable_all()
                 .build().expect("Could not create Tokio runtime");
-    let mut client: OpenLimitsWs<AnyWsExchange> = rt.block_on(OpenLimitsWs::instantiate(ws_params.clone()));
+    let mut client: OpenLimitsWs<AnyWsExchange> = rt.block_on(OpenLimitsWs::instantiate(init_params.clone()));
     let mut handler_instance = get_object(&env, &exchange_client_instance, "eventHandler", EVENT_HANDLER_CLS_NAME).expect("Class has no event handler field").map(
       |inst| env.new_global_ref(inst).expect("Failed to create global ref")
     );
@@ -402,6 +391,10 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_init(env: JNIEnv, 
       match next_msg {
         Either::Left((thread_cmd, _)) => {
           match thread_cmd {
+            Some(SubthreadCmd::Disconnect) => {
+              println!("Disconnecting");
+              break;
+            },
             Some(SubthreadCmd::SetEventHandler) => {
               handler_instance = get_object(&env, &exchange_client_instance, "eventHandler", EVENT_HANDLER_CLS_NAME).expect("Class has no event handler field").map(
                 |inst| env.new_global_ref(inst).expect("Failed to create global ref")
@@ -428,7 +421,23 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_init(env: JNIEnv, 
           
           let msg = match sub_msg {
             Some(Ok(msg)) => msg,
-            Some(Err(e)) => panic!(e),
+            Some(Err(e)) =>{
+                match e {
+                  _ => {
+                    let res = env.call_method_unchecked(
+                      handler,
+                      on_error,
+                      jni::signature::JavaType::Primitive(jni::signature::Primitive::Void),
+                      &[]
+                    );
+  
+                    if res.is_err() {
+                      println!("Failed to do callback: {}", res.err().unwrap());
+                    }
+                  }
+                }
+                continue;
+            },
             None => {
               continue;
             }
@@ -482,6 +491,26 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_init(env: JNIEnv, 
     }
   });
 }
+
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_init(env: JNIEnv, _class: JClass, cli: JObject, conf: JObject) {
+  let init_params = match get_options(&env, &conf) {
+    Ok(conf) => conf,
+    Err(e) => panic!("invalid config: {}", e)
+  };
+  let ws_params = init_params.clone();
+  let mut runtime = tokio::runtime::Builder::new().basic_scheduler().enable_all().build().expect("Failed to create tokio runtime");
+  
+  let client_future = OpenLimits::instantiate(init_params.clone());
+  let client: AnyExchange = runtime.block_on(client_future);
+
+  env.set_rust_field(cli, "_config", init_params).unwrap();
+  env.set_rust_field(cli, "_client", client).unwrap();
+  env.set_rust_field(cli, "_runtime", runtime).unwrap();
+
+  init_ws(env, _class, cli, ws_params);
+}
+
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_subscribe(env: JNIEnv, _class: JClass,  cli: JObject, sub: JObject) {
   let sub_request_tx: MutexGuard<tokio::sync::mpsc::UnboundedSender<SubthreadCmd>> = env.get_rust_field(cli, "_sub_tx").expect("Failed to get sub channel");
@@ -491,6 +520,16 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_subscribe(env: JNI
     Ok(_) => {}
   }
 }
+
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_disconnect(env: JNIEnv, _class: JClass,  cli: JObject) {
+  let sub_request_tx: MutexGuard<tokio::sync::mpsc::UnboundedSender<SubthreadCmd>> = env.get_rust_field(cli, "_sub_tx").expect("Failed to get sub channel");
+  match sub_request_tx.send(SubthreadCmd::Disconnect) {
+    Err(_) => println!("Failed to send subscribe cmd"),
+    Ok(_) => {}
+  }
+}
+
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_setSubscriptionCallback(env: JNIEnv, _class: JClass,  cli: JObject) {
   let sub_request_tx: MutexGuard<tokio::sync::mpsc::UnboundedSender<SubthreadCmd>> = env.get_rust_field(cli, "_sub_tx").expect("Failed to get sub channel");
