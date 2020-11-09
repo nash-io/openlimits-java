@@ -10,12 +10,23 @@ repositories {
     mavenCentral()
 }
 
+task buildNativeDeps {
+
+    exec {
+        workingDir "src/main/openlimits-lib"
+        commandLine 'cargo', 'build', '--release'
+    }
+}
+
 task copyNativeDeps {
     copy {
         from "${projectDir}/src/main/openlimits-lib/target/release/libopenlimits_java.*"
         into 'build/libs'
     }
 }
+
+
+
 
 tasks.withType(Test) {
     environment("BINANCE_API_KEY", System.getenv('BINANCE_API_KEY'))
