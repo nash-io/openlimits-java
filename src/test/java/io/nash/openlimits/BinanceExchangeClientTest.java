@@ -22,10 +22,26 @@ public class BinanceExchangeClientTest extends TestCase {
 
         client = new ExchangeClient(new ExchangeClientConfig(config));
     }
+    public  void testError() {
+        try {
+            client.getHistoricRates(new GetHistoryRatesRequest("sadsdqwe", "OneHour"));
+            fail("Expected to get an exception");
+        } catch(OpenLimitsException e) {
+            System.out.println(e.getMessage());
+        }
+    }
     public void testOrderBook() {
         System.out.println(client.orderBook("BNBBTC"));
     }
     public void testLimitBuy() {
+        System.out.println(client.limitBuy(LimitRequest.goodTillCancelled(
+                "0.001",
+                "1",
+                "BNBBTC"
+        )));
+    }
+    public void testErrors() {
+
         System.out.println(client.limitBuy(LimitRequest.goodTillCancelled(
                 "0.001",
                 "1",

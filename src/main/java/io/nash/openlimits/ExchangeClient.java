@@ -29,9 +29,10 @@ public class ExchangeClient {
 
     native private OrderCanceled cancelOrder(ExchangeClient client, CancelOrderRequest req);
     native private OrderCanceled[] cancelAllOrders(ExchangeClient client, CancelAllOrdersRequest req);
+    native private MarketPair[] receivePairs(ExchangeClient client);
+
     native private void setSubscriptionCallback(ExchangeClient client);
 
-    native private MarketPair[] receivePairs(ExchangeClient client);
 
 
     native private void subscribe(ExchangeClient client, Subscription subscription);
@@ -104,18 +105,17 @@ public class ExchangeClient {
     }
 
     public static void run(Runnable restart) {
-        String apiKey = System.getenv("NASH_API_KEY");
-        String secret = System.getenv("NASH_API_SECRET");
-        NashConfig nashConfig = new NashConfig(
-                new NashCredentials(
-                        secret,
-                        apiKey
-                ),
-                0,
-                "sandbox",
-                10000
+        String apiKey = System.getenv("BINANCE_API_KEY");
+        String secret = System.getenv("BINANCE_API_SECRET");
+
+        BinanceConfig config = new BinanceConfig(
+                true,
+                new BinanceCredentials(
+                        apiKey,
+                        secret
+                )
         );
-        final ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(nashConfig));
+        final ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(config));
         client.setSubscriptionCallback(new OpenLimitsEventHandler() {
             @Override
             public void onOrderbook(OrderbookResponse orderbook) {
@@ -127,7 +127,7 @@ public class ExchangeClient {
                 restart.run();
             }
         });
-        client.subscribe(Subscription.orderbook("btc_usdc", 5));
+        client.subscribe(Subscription.orderbook("BNBBTC", 5));
     }
 
     public static void main(String[] args) {

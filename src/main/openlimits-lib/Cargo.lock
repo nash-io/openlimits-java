@@ -1251,6 +1251,7 @@ dependencies = [
  "jni",
  "openlimits",
  "rust_decimal",
+ "thiserror",
  "tokio",
 ]
 

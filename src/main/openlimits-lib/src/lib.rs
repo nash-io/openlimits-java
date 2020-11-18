@@ -15,7 +15,6 @@ use openlimits::{
     NashParameters,
     Environment
   },
-  errors::OpenLimitError,
   binance::{
     BinanceCredentials,
     BinanceParameters,
@@ -53,6 +52,61 @@ use openlimits::{
 use futures_util::future::{select, Either};
 use tokio::stream::StreamExt;
 use std::sync::MutexGuard;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum OpenlimitsJavaError {
+  #[error("Invalid argument {0}")]
+  InvalidArgument(String),
+  #[error("{0}")]
+  OpenLimitsError(#[from] openlimits::errors::OpenLimitError),
+  #[error("{0}")]
+  JNIError(#[from] jni::errors::Error)
+}
+
+fn map_error_to_error_class(err: &OpenlimitsJavaError) -> &'static str {
+  match err {
+    OpenlimitsJavaError::InvalidArgument(_) => "Ljava/lang/IllegalArgumentException;",
+    OpenlimitsJavaError::OpenLimitsError(e) => {
+      match e {
+        openlimits::errors::OpenLimitError::BinanceError(_) => "Lio/nash/openlimits/BinanceError;",
+        openlimits::errors::OpenLimitError::CoinbaseError(_) => "Lio/nash/openlimits/CoinbaseError;",
+        openlimits::errors::OpenLimitError::NashProtocolError(_) => "Lio/nash/openlimits/NashProtocolError;",
+        openlimits::errors::OpenLimitError::MissingImplementation(_) => "Lio/nash/openlimits/MissingImplementation;",
+        openlimits::errors::OpenLimitError::AssetNotFound() => "Lio/nash/openlimits/AssetNotFound;",
+        openlimits::errors::OpenLimitError::NoApiKeySet() => "Lio/nash/openlimits/NoApiKeySet;",
+        openlimits::errors::OpenLimitError::InternalServerError() => "Lio/nash/openlimits/InternalServerError;",
+        openlimits::errors::OpenLimitError::ServiceUnavailable() => "Lio/nash/openlimits/ServiceUnavailable;",
+        openlimits::errors::OpenLimitError::Unauthorized() => "Lio/nash/openlimits/Unauthorized;",
+        openlimits::errors::OpenLimitError::SymbolNotFound() => "Lio/nash/openlimits/SymbolNotFound;",
+        openlimits::errors::OpenLimitError::SocketError() => "Lio/nash/openlimits/SocketError;",
+        openlimits::errors::OpenLimitError::GetTimestampFailed() => "Lio/nash/openlimits/GetTimestampFailed;",
+        openlimits::errors::OpenLimitError::ReqError(_) => "Lio/nash/openlimits/ReqError;",
+        openlimits::errors::OpenLimitError::InvalidHeaderError(_) => "Lio/nash/openlimits/InvalidHeaderError;",
+        openlimits::errors::OpenLimitError::InvalidPayloadSignature(_) => "Lio/nash/openlimits/InvalidPayloadSignature;",
+        openlimits::errors::OpenLimitError::IoError(_) => "Lio/nash/openlimits/IoError;",
+        openlimits::errors::OpenLimitError::PoisonError() => "Lio/nash/openlimits/PoisonError;",
+        openlimits::errors::OpenLimitError::JsonError(_) => "Lio/nash/openlimits/JsonError;",
+        openlimits::errors::OpenLimitError::ParseFloatError(_) => "Lio/nash/openlimits/ParseFloatError;",
+        openlimits::errors::OpenLimitError::UrlParserError(_) => "Lio/nash/openlimits/UrlParserError;",
+        openlimits::errors::OpenLimitError::Tungstenite(_) => "Lio/nash/openlimits/Tungstenite;",
+        openlimits::errors::OpenLimitError::TimestampError(_) => "Lio/nash/openlimits/TimestampError;",
+        openlimits::errors::OpenLimitError::UnkownResponse(_) => "Lio/nash/openlimits/UnkownResponse;",
+        openlimits::errors::OpenLimitError::NotParsableResponse(_) => "Lio/nash/openlimits/NotParsableResponse;",
+        openlimits::errors::OpenLimitError::MissingParameter(_) => "Lio/nash/openlimits/MissingParameter;",
+      }
+    },
+    OpenlimitsJavaError::JNIError(e) => {
+      match e {
+        jni::errors::Error::NullPtr(_) => "Ljava/lang/NullPointerException;",
+        jni::errors::Error::NullDeref(_) => "Ljava/lang/NullPointerException;",
+        _ => "Ljava/lang/Exception;"
+      }
+    }
+  }
+}
+
+type OpenLimitsJavaResult<T> = Result<T, OpenlimitsJavaError>;
 
 fn map_err(e: jni::errors::Error) -> String {
   format!("{}", e)
@@ -539,206 +593,269 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_setSubscriptionCal
   }
 }
 
+fn handle_jobject_result(env: JNIEnv, result: OpenLimitsJavaResult<JObject>) -> jobject {
+  match result {
+    Ok(obj) => obj.into_inner(),
+    Err(err) => {
+      let s = map_error_to_error_class(&err);
+      let msg = format!("{:?}", err);
+      env.throw_new(env.find_class(s).expect("Failed to find class"), msg).expect("Failed to raise exception");
+      JObject::null().into_inner()
+    }
+  }
+}
+
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_orderBook(env: JNIEnv, _class: JClass,  cli: JObject, market: JString) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-  let req = OrderBookRequest {
-    market_pair: env.get_string(market).expect("unvalid string").into()
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
+    let req = OrderBookRequest {
+      market_pair: env.get_string(market)?.into()
+    };
+  
+    let resp = runtime.block_on(client.order_book(&req))?;
+    let out = orderbook_resp_to_jobject(&env, resp)?;
+    Ok(out)
   };
 
-  let resp = runtime.block_on(client.order_book(&req)).expect("Failed to get response");
-  let out = orderbook_resp_to_jobject(&env, resp).expect("Failed to convert responce to Java object");
-
-  out.into_inner()
+  handle_jobject_result(env, call())
 }
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getPriceTicker(env: JNIEnv, _class: JClass,  cli: JObject, market: JString) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
 
-  let req = GetPriceTickerRequest {
-    market_pair: env.get_string(market).expect("unvalid string").into()
+    let req = GetPriceTickerRequest {
+      market_pair: env.get_string(market)?.into()
+    };
+
+    let resp = runtime.block_on(client.get_price_ticker(&req))?;
+    let out = ticker_to_jobject(&env, resp)?;
+    Ok(out)
   };
 
-  let resp = runtime.block_on(client.get_price_ticker(&req)).expect("Failed to get response");
-  let out = ticker_to_jobject(&env, resp).expect("Failed to convert responce to Java object");
-
-  out.into_inner()
+  handle_jobject_result(env, call())
 }
 
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getHistoricRates(env: JNIEnv, _class: JClass,  cli: JObject, hist_req: JObject) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
 
-  let req = get_historic_rates_request(&env, &hist_req).expect("Failed to parse params");
+    let req = get_historic_rates_request(&env, &hist_req).map_err(OpenlimitsJavaError::InvalidArgument)?;
 
-  let resp = runtime.block_on(client.get_historic_rates(&req)).expect("Failed to get response");
-  let out = vec_to_jobject(&env, CANDLE_CLS_NAME, resp, candle_to_jobject).expect("Failed to convert result to Java");
-  out.into_inner()
+    let resp = runtime.block_on(client.get_historic_rates(&req))?;
+    let out = vec_to_jobject(&env, CANDLE_CLS_NAME, resp, candle_to_jobject)?;
+    Ok(out)
+  };
+
+  handle_jobject_result(env, call())
 }
 
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getHistoricTrades(env: JNIEnv, _class: JClass,  cli: JObject, trades_req: JObject) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
+    let req = get_historic_trades_request(&env, &trades_req).map_err(OpenlimitsJavaError::InvalidArgument)?;
 
-  let req = get_historic_trades_request(&env, &trades_req).expect("Failed to parse params");
+    let resp = runtime.block_on(client.get_historic_trades(&req))?;
+    let out = vec_to_jobject(&env, TRADE_CLS_NAME, resp, trade_to_jobject)?;
+    Ok(out)
+  };
 
-  let resp = runtime.block_on(client.get_historic_trades(&req)).expect("Failed to get response");
-  let out = vec_to_jobject(&env, TRADE_CLS_NAME, resp, trade_to_jobject).expect("Failed to convert result to Java");
-  out.into_inner()
+  handle_jobject_result(env, call())
 }
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_limitBuy(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
 
-  let req = get_limit_request(&env, &req).expect("Failed to parse params");
-  let resp = runtime.block_on(client.limit_buy(&req)).expect("Failed to get response");
-  order_to_jobject(&env, resp).expect("Failed to convert response to order").into_inner()
+    let req = get_limit_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
+    let resp = runtime.block_on(client.limit_buy(&req))?;
+    
+    Ok(order_to_jobject(&env, resp)?)
+  };
+  handle_jobject_result(env, call())
 }
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_limitSell(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
 
-  let req = get_limit_request(&env, &req).expect("Failed to parse params");
+    let req = get_limit_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
 
-  let resp = runtime.block_on(client.limit_sell(&req)).expect("Failed to get response");
-  order_to_jobject(&env, resp).expect("Failed to convert response to order").into_inner()
+    let resp = runtime.block_on(client.limit_sell(&req))?;
+    Ok(order_to_jobject(&env, resp)?)
+  };
+  handle_jobject_result(env, call())
 }
-
 
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_marketBuy(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
 
-  let req = get_market_request(&env, &req).expect("Failed to parse params");
+    let req = get_market_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
 
-  let resp = runtime.block_on(client.market_buy(&req)).expect("Failed to get response");
-  order_to_jobject(&env, resp).expect("Failed to convert response to order").into_inner()
+    let resp = runtime.block_on(client.market_buy(&req))?;
+    Ok(order_to_jobject(&env, resp)?)
+  };
+  handle_jobject_result(env, call())
 }
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_marketSell(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
 
-  let req = get_market_request(&env, &req).expect("Failed to parse params");
+    let req = get_market_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
 
-  let resp = runtime.block_on(client.market_sell(&req)).expect("Failed to get response");
-  order_to_jobject(&env, resp).expect("Failed to convert response to order").into_inner()
+    let resp = runtime.block_on(client.market_sell(&req))?;
+    Ok(order_to_jobject(&env, resp)?)
+  };
+  handle_jobject_result(env, call())
 }
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getAllOpenOrders(env: JNIEnv, _class: JClass,  cli: JObject) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
 
-  let resp = runtime.block_on(client.get_all_open_orders()).expect("Failed to get response");
+    let resp = runtime.block_on(client.get_all_open_orders())?;
 
-  let out = vec_to_jobject(&env, ORDER_CLS_NAME, resp, order_to_jobject).expect("Failed to convert result to Java");
-  out.into_inner()
+    let out = vec_to_jobject(&env, ORDER_CLS_NAME, resp, order_to_jobject)?;
+    Ok(out)
+  };
+  handle_jobject_result(env, call())
 }
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getOrderHistory(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
-  let req = get_order_history_request(&env, &req).expect("Failed to parse params");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
+    let req = get_order_history_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
 
-  let resp = runtime.block_on(client.get_order_history(&req)).expect("Failed to get response");
-  let out = vec_to_jobject(&env, ORDER_CLS_NAME, resp, order_to_jobject).expect("Failed to convert result to Java");
-  out.into_inner()
+    let resp = runtime.block_on(client.get_order_history(&req))?;
+    let out = vec_to_jobject(&env, ORDER_CLS_NAME, resp, order_to_jobject)?;
+    Ok(out)
+  };
+  handle_jobject_result(env, call())
 }
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getOrder(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
-  let req = get_order_request(&env, &req).expect("Failed to parse params");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+    let req = get_order_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
 
-  let resp = runtime.block_on(client.get_order(&req)).expect("Failed to get response");
+    let resp = runtime.block_on(client.get_order(&req))?;
 
-  order_to_jobject(&env, resp).expect("Failed to convert response to order").into_inner()
+    Ok(order_to_jobject(&env, resp)?)
+  };
+  handle_jobject_result(env, call())
 }
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getTradeHistory(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
-  let req = get_trade_history_request(&env, &req).expect("Failed to parse params");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
+    let req = get_trade_history_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
 
-  let resp = runtime.block_on(client.get_trade_history(&req)).expect("Failed to get response");
-  let out = vec_to_jobject(&env, TRADE_CLS_NAME, resp, trade_to_jobject).expect("Failed to convert result to Java");
-  out.into_inner()
+    let resp = runtime.block_on(client.get_trade_history(&req))?;
+    let out = vec_to_jobject(&env, TRADE_CLS_NAME, resp, trade_to_jobject)?;
+    Ok(out)
+  };
+  handle_jobject_result(env, call())
 }
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getAccountBalances(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
-  let req = match req.is_null() {
-    true => None,
-    false => Some(get_paginator(&env, &req))
-  };
-  let paginator = req.transpose().expect("Invalid paginator object");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
+    let req = match req.is_null() {
+      true => None,
+      false => Some(get_paginator(&env, &req))
+    };
+    let paginator = req.transpose().map_err(OpenlimitsJavaError::InvalidArgument)?;
 
-  let resp = runtime.block_on(client.get_account_balances(paginator)).expect("Failed to get response");
-  let out = vec_to_jobject(&env, BALANCE_CLS_NAME, resp, balance_to_jobject).expect("Failed to convert result to Java");
-  out.into_inner()
+    let resp = runtime.block_on(client.get_account_balances(paginator))?;
+    let out = vec_to_jobject(&env, BALANCE_CLS_NAME, resp, balance_to_jobject)?;
+    Ok(out)
+  };
+  handle_jobject_result(env, call())
 }
 
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_cancelOrder(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
-  let req = get_cancel_order_request(&env, &req).expect("Failed to parse params");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
+    let req = get_cancel_order_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
 
-  let resp = runtime.block_on(client.cancel_order(&req)).expect("Failed to get response");
+    let resp = runtime.block_on(client.cancel_order(&req))?;
 
-  order_cancelled_to_jobject(&env, resp).expect("Failed to convert response to order").into_inner()
+    let out = order_cancelled_to_jobject(&env, resp)?;
+    Ok(out)
+  };
+  handle_jobject_result(env, call())
 }
 
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_cancelAllOrders(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
-  let req = get_cancel_all_orders_request(&env, &req).expect("Failed to parse params");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
+    let req = get_cancel_all_orders_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
 
-  let resp = runtime.block_on(client.cancel_all_orders(&req)).expect("Failed to get response");
+    let resp = runtime.block_on(client.cancel_all_orders(&req))?;
 
-  let out = vec_to_jobject(&env, ORDER_CANCELED_CLS_NAME, resp, order_cancelled_to_jobject).expect("Failed to convert result to Java");
-  out.into_inner()
+    let out = vec_to_jobject(&env, ORDER_CANCELED_CLS_NAME, resp, order_cancelled_to_jobject)?;
+    Ok(out)
+  };
+  handle_jobject_result(env, call())
 }
 
 
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_receivePairs(env: JNIEnv, _class: JClass,  cli: JObject) -> jobject {
-  let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client").expect("Failed to get client");
-  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+  let call = move || -> OpenLimitsJavaResult<JObject> {
+    let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
 
-  
-  let resp = runtime.block_on(client.retrieve_pairs()).expect("Failed to get response");
-  let pairs_maybe: errors::Result<Vec<_>> = resp.into_iter().map(|v| market_pair_to_jobject(&env, v)).collect();
-  let pairs = pairs_maybe.expect("Failed to convert Pairs to Java");
-  let pairs_cls = env.find_class(MARKET_PAIR_CLS_NAME).expect("Can't find MarketPair Class");
+    
+    let resp = runtime.block_on(client.retrieve_pairs())?;
+    let pairs_maybe: errors::Result<Vec<_>> = resp.into_iter().map(|v| market_pair_to_jobject(&env, v)).collect();
+    let pairs = pairs_maybe?;
+    let pairs_cls = env.find_class(MARKET_PAIR_CLS_NAME).expect("Can't find MarketPair Class");
 
-  let out = vec_to_java_arr(&env, pairs_cls, &pairs).expect("Failed to convert vec to array");
-  out.l().expect("failed to convert out array to object").into_inner()
+    let out = vec_to_java_arr(&env, pairs_cls, &pairs).expect("Failed to convert vec to array");
+    Ok(out.l()?)
+  };
+  handle_jobject_result(env, call())
 }
+
 
 /// jobject to openlimits
 
