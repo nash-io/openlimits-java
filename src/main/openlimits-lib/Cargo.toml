@@ -17,4 +17,4 @@ futures-util = "0.3"
 jni = "0.18.0"
 rust_decimal = "1.7.0"
 thiserror = "1.0.22"
-openlimits = { git = "https://github.com/nash-io/openlimits" }
+openlimits = { git = "https://github.com/nash-io/openlimits", branch = "fix-deps-for-wrappers" }
