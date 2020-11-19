@@ -8,4 +8,12 @@ public class BinanceConfig {
         this.sandbox = sandbox;
         this.credentials = credentials;
     }
+
+    @Override
+    public String toString() {
+        return "BinanceConfig{" +
+                "sandbox=" + sandbox +
+                ", credentials=" + credentials +
+                '}';
+    }
 }
