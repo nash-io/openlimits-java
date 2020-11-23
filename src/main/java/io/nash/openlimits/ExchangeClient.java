@@ -1,17 +1,67 @@
 package io.nash.openlimits;
 
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.function.Consumer;
+
 public class ExchangeClient {
     static {
         System.loadLibrary("openlimits_java");
     }
     private ExchangeClientConfig config;
+
+    @SuppressWarnings("unused")
     private long _config;
+
+    @SuppressWarnings("unused")
     private long _client;
+
+    @SuppressWarnings("unused")
     private long _runtime;
+
+    @SuppressWarnings("unused")
     private long _sub_tx;
+
+    @SuppressWarnings("unused")
     private long _handler_tx;
-    private OpenLimitsEventHandler eventHandler = null;
+
+    @SuppressWarnings("unused")
+    private void onPing() {
+        this.onPingCallbacks.forEach(Runnable::run);
+    }
+
+    @SuppressWarnings("unused")
+    private void onDisconnect() {
+        this.onDisconnectCallbacks.forEach(Runnable::run);
+    }
+
+    @SuppressWarnings("unused")
+    private void onError(OpenLimitsException error) {
+        this.onErrorCallbacks.forEach(callback -> callback.accept(error));
+    }
+
+    @SuppressWarnings("unused")
+    private void onOrderbook(OrderbookResponse orderbook) {
+        if (!this.onOrderbookCallbacks.containsKey(orderbook.market)) {
+            return;
+        }
+        this.onOrderbookCallbacks.get(orderbook.market).forEach(callback -> callback.accept(orderbook));
+
+    }
+    @SuppressWarnings("unused")
+    private void onTrades(TradesResponse trades) {
+        if (!this.onTradesCallbacks.containsKey(trades.market)) {
+            return;
+        }
+        this.onTradesCallbacks.get(trades.market).forEach(callback -> callback.accept(trades));
+    }
+
+    final private ArrayList<Consumer<OpenLimitsException>> onErrorCallbacks = new ArrayList<>();
+    final private ArrayList<Runnable> onDisconnectCallbacks = new ArrayList<>();
+    final private ArrayList<Runnable> onPingCallbacks = new ArrayList<>();
+    final private HashMap<String, ArrayList<Consumer<OrderbookResponse>>> onOrderbookCallbacks = new HashMap<>();
+    final private HashMap<String, ArrayList<Consumer<TradesResponse>>> onTradesCallbacks = new HashMap<>();
 
     native private OrderbookResponse orderBook(ExchangeClient client, String market);
     native private Ticker getPriceTicker(ExchangeClient client, String market);
@@ -31,24 +81,37 @@ public class ExchangeClient {
     native private OrderCanceled[] cancelAllOrders(ExchangeClient client, CancelAllOrdersRequest req);
     native private MarketPair[] receivePairs(ExchangeClient client);
 
-    native private void setSubscriptionCallback(ExchangeClient client);
-
-
 
     native private void subscribe(ExchangeClient client, Subscription subscription);
     native private void disconnect(ExchangeClient client);
 
     native private void init(ExchangeClient client, ExchangeClientConfig conf);
-    public void subscribe(Subscription subscription) {
-        this.subscribe(this, subscription);
+    public void subscribeTrades(String market, Consumer<TradesResponse> onTrades) {
+        if (!this.onTradesCallbacks.containsKey(market)) {
+            this.onTradesCallbacks.put(market, new ArrayList<>());
+        }
+        this.onTradesCallbacks.get(market).add(onTrades);
+        this.subscribe(this, Subscription.trade(market));
+
+    }
+    public void subscribeOrderbook(String market, Consumer<OrderbookResponse> onOrderbook) {
+        if (!this.onOrderbookCallbacks.containsKey(market)) {
+            this.onOrderbookCallbacks.put(market, new ArrayList<>());
+        }
+        this.onOrderbookCallbacks.get(market).add(onOrderbook);
+        this.subscribe(this, Subscription.orderbook(market));
+    }
+    public void subscribeError(Consumer<OpenLimitsException> onError) {
+        this.onErrorCallbacks.add(onError);
+    }
+    public void subscribePing(Runnable onPing) {
+        this.onPingCallbacks.add(onPing);
+    }
+    public void subscribeDisconnect(Runnable onPing) {
+        this.onDisconnectCallbacks.add(onPing);
     }
     public void disconnect() {
         this.disconnect(this);
-    }
-
-    public void setSubscriptionCallback(OpenLimitsEventHandler handler) {
-        this.eventHandler = handler;
-        this.setSubscriptionCallback(this);
     }
 
     public Order limitBuy(LimitRequest request) {
@@ -105,29 +168,31 @@ public class ExchangeClient {
     }
 
     public static void run(Runnable restart) {
-        String apiKey = System.getenv("BINANCE_API_KEY");
-        String secret = System.getenv("BINANCE_API_SECRET");
-
-        BinanceConfig config = new BinanceConfig(
-                true,
-                new BinanceCredentials(
-                        apiKey,
-                        secret
-                )
+        NashConfig config = new NashConfig(
+                null,// new NashCredentials("", ""),
+                0,
+                "production",
+                1000
         );
         final ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(config));
-        client.setSubscriptionCallback(new OpenLimitsEventHandler() {
-            @Override
-            public void onOrderbook(OrderbookResponse orderbook) {
-                System.out.println(orderbook);
-            }
-            @Override
-            public void onError() {
-                System.out.println("Got error. Closing down clients");
-                restart.run();
-            }
+        client.subscribeOrderbook("btc_usdc", (OrderbookResponse orderbook) -> {
+            System.out.println(orderbook);
         });
-        client.subscribe(Subscription.orderbook("BNBBTC", 5));
+
+        client.subscribeOrderbook("noia_usdc", (OrderbookResponse orderbook) -> {
+            System.out.println(orderbook);
+        });
+
+        client.subscribeError(err -> {
+            System.out.println("Experienced an error, cleaning up");
+            client.cancelAllOrders(new CancelAllOrdersRequest("btc_usdc"));
+            client.cancelAllOrders(new CancelAllOrdersRequest("noia_usdc"));
+            client.disconnect();
+        });
+
+        client.subscribeDisconnect(() -> {
+            System.out.println("Resetting bot");
+        });
     }
 
     public static void main(String[] args) {
