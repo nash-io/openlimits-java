@@ -94,11 +94,6 @@ public class BinanceExchangeClientTest extends TestCase {
                 "OneHour"
         ))));
     }
-    public void testGetOrderHistory() {
-        System.out.println(Arrays.toString(client.getOrderHistory( new GetOrderHistoryRequest(
-                "BNBBTC"
-        ))));
-    }
     public void testGetOrder() {
         Order order = client.limitSell(LimitRequest.goodTillCancelled(
                 "0.001",
@@ -107,6 +102,12 @@ public class BinanceExchangeClientTest extends TestCase {
         ));
 
         System.out.println(client.getOrder(new GetOrderRequest(order.id, "BNBBTC")));
+    }
+
+    public void testGetOrderHistory() {
+        System.out.println(Arrays.toString(client.getOrderHistory( new GetOrderHistoryRequest(
+                "BNBBTC"
+        ))));
     }
     public void testGetTradeHistory() {
         System.out.println(Arrays.toString(client.getTradeHistory( new TradeHistoryRequest(

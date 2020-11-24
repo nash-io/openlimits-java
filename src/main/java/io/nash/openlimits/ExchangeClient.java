@@ -167,9 +167,11 @@ public class ExchangeClient {
         this.init(this, conf);
     }
 
-    public static void run(Runnable restart) {
+    public static void run() {
+        String apiKey = System.getenv("NASH_API_SESSION_PROD");
+        String secret = System.getenv("NASH_API_SECRET_PROD");
         NashConfig config = new NashConfig(
-                null,// new NashCredentials("", ""),
+                new NashCredentials(secret, apiKey),
                 0,
                 "production",
                 1000
@@ -193,11 +195,18 @@ public class ExchangeClient {
         client.subscribeDisconnect(() -> {
             System.out.println("Resetting bot");
         });
+
+        client.cancelAllOrders(new CancelAllOrdersRequest("btc_usdc"));
+        client.limitSell(LimitRequest.goodTillCancelled(
+                "20110.1",
+                "0.00030260",
+                "btc_usdc"
+        ));
+        client.cancelAllOrders(new CancelAllOrdersRequest("btc_usdc"));
+        client.disconnect();
     }
 
     public static void main(String[] args) {
-        run(() -> {
-            main(args);
-        });
+        run();
     }
 }

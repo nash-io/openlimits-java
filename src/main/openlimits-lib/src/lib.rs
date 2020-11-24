@@ -414,8 +414,8 @@ fn market_pair_to_jobject<'a>(env: &JNIEnv<'a>, pair: MarketPair) -> errors::Res
     env.new_string(pair.symbol)?.into(),
     env.new_string(pair.base_increment.to_string())?.into(),
     env.new_string(pair.quote_increment.to_string())?.into(),
-    min_base_trade_size,
-    min_quote_trade_size
+    min_base_trade_size.into(),
+    min_quote_trade_size.into()
   ];
 
   env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", ctor_args)
