@@ -392,6 +392,21 @@ fn balance_to_jobject<'a>(env: &JNIEnv<'a>, balance: Balance) -> errors::Result<
 
 fn market_pair_to_jobject<'a>(env: &JNIEnv<'a>, pair: MarketPair) -> errors::Result<JObject<'a>> {
   let cls_resp = env.find_class(MARKET_PAIR_CLS_NAME)?;
+  
+  let min_base_trade_size = pair.min_base_trade_size;
+  let min_base_trade_size = min_base_trade_size.map(|f|f.to_string());
+  let min_base_trade_size = match min_base_trade_size {
+    None => JObject::null().into(),
+    Some(s) => env.new_string(s)?
+  };
+  
+  let min_quote_trade_size = pair.min_quote_trade_size;
+  let min_quote_trade_size = min_quote_trade_size.map(|f|f.to_string());
+  let min_quote_trade_size = match min_quote_trade_size {
+    None => JObject::null().into(),
+    Some(s) => env.new_string(s)?
+  };
+  
 
   let ctor_args = &[
     env.new_string(pair.base)?.into(),
@@ -399,8 +414,8 @@ fn market_pair_to_jobject<'a>(env: &JNIEnv<'a>, pair: MarketPair) -> errors::Res
     env.new_string(pair.symbol)?.into(),
     env.new_string(pair.base_increment.to_string())?.into(),
     env.new_string(pair.quote_increment.to_string())?.into(),
-    env.new_string(pair.min_base_trade_size.unwrap().to_string())?.into(),
-    env.new_string(pair.min_quote_trade_size.unwrap().to_string())?.into()
+    min_base_trade_size,
+    min_quote_trade_size
   ];
 
   env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", ctor_args)
