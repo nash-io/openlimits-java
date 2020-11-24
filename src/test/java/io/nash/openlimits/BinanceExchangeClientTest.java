@@ -11,7 +11,6 @@ public class BinanceExchangeClientTest extends TestCase {
         super.setUp();
         String apiKey = System.getenv("BINANCE_API_KEY");
         String secret = System.getenv("BINANCE_API_SECRET");
-
         BinanceConfig config = new BinanceConfig(
                 true,
                 new BinanceCredentials(

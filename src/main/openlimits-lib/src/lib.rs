@@ -96,7 +96,7 @@ fn map_openlimits_error_class(err: &openlimits::errors::OpenLimitError) -> &'sta
 
 fn map_error_to_error_class(err: &OpenlimitsJavaError) -> &'static str {
   match err {
-    OpenlimitsJavaError::InvalidArgument(_) => "Ljava/lang/IllegalArgumentException;",
+    OpenlimitsJavaError::InvalidArgument(_) => "Lio/nash/openlimits/InvalidArgument;",
     OpenlimitsJavaError::OpenLimitsError(e) => map_openlimits_error_class(e),
     OpenlimitsJavaError::JNIError(e) => {
       match e {
@@ -692,7 +692,7 @@ fn handle_jobject_result(env: JNIEnv, result: OpenLimitsJavaResult<JObject>) -> 
     Err(err) => {
       let s = map_error_to_error_class(&err);
       let msg = format!("{:?}", err);
-      env.throw_new(env.find_class(s).expect("Failed to find class"), msg).expect("Failed to raise exception");
+      env.throw_new(env.find_class(s).expect(format!("Failed to find class {} {}", s, msg).as_str()), msg).expect("Failed to raise exception");
       JObject::null().into_inner()
     }
   }
@@ -704,7 +704,7 @@ fn handle_void_result(env: JNIEnv, result: OpenLimitsJavaResult<()>) {
     Err(err) => {
       let s = map_error_to_error_class(&err);
       let msg = format!("{:?}", err);
-      env.throw_new(env.find_class(s).expect("Failed to find class"), msg).expect("Failed to raise exception");
+      env.throw_new(env.find_class(s).expect(format!("Failed to find class {} {}", s, msg).as_str()), msg).expect("Failed to raise exception");
     }
   }
 }
@@ -1183,7 +1183,7 @@ fn get_limit_request(
   let time_in_force_time = get_long_default_with_default(env, req, "timeInForceDurationMs", 0)?;
   let time_in_force = string_to_time_in_force(time_in_force.as_str(), time_in_force_time as i64)?;
   let market_pair = get_string_non_null(env, req, "market")?;
-  let post_only = get_field(env, req, "post_only",  "Z")?.unwrap_or(JValue::Bool(0)).z().map_err(|_| "Failed to convert boolean to jvalue")?;
+  let post_only = get_field(env, req, "postOnly",  "Z")?.unwrap_or(JValue::Bool(0)).z().map_err(|_| "Failed to convert boolean to jvalue")?;
   let size = Decimal::from_str(size.as_str()).map_err(|e|e.to_string())?;
   let price = Decimal::from_str(price.as_str()).map_err(|e|e.to_string())?;
   Ok(
