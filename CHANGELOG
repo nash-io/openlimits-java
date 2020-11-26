@@ -1,4 +1,4 @@
-v0.1.1
+v0.1.2
  - Add support for affiliate code
  - Expose updateId and lastUpdateId in orderbooks to enable better local orderbook management
  - Fix a memory leak
