@@ -347,6 +347,7 @@ fn order_status_to_string(typ: OrderStatus) -> &'static str {
 
 fn order_to_jobject<'a>(env: &JNIEnv<'a>, order: Order) -> errors::Result<JObject<'a>> {
   let cls_resp = env.find_class(ORDER_CLS_NAME)?;
+  let trades = vec_to_jobject(&env, TRADE_CLS_NAME, order.trades, trade_to_jobject)?;
   let ctor_args = &[
     env.new_string(order.id)?.into(),
     env.new_string(order.market_pair)?.into(),
@@ -356,9 +357,10 @@ fn order_to_jobject<'a>(env: &JNIEnv<'a>, order: Order) -> errors::Result<JObjec
     side_to_string(env, order.side)?.into(),
     env.new_string(order_status_to_string(order.status))?.into(),
     env.new_string(order.size.to_string())?.into(),
-    string_option_to_null(order.price.map(|p| env.new_string(p.to_string())).transpose()?)
+    string_option_to_null(order.price.map(|p| env.new_string(p.to_string())).transpose()?),
+    trades.into()
   ];
-  env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", ctor_args)
+  env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[Lio/nash/openlimits/Trade;)V", ctor_args)
 }
 
 fn vec_to_jobject<'a, T, F>(env: &JNIEnv<'a>, cls: &str, entries: Vec<T>, f: F) -> errors::Result<JObject<'a>>

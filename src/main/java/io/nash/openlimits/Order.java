@@ -1,5 +1,7 @@
 package io.nash.openlimits;
 
+import java.util.Arrays;
+
 public class Order {
     public final String id;
     public final String market;
@@ -10,8 +12,9 @@ public class Order {
     public final String status;
     public final String size;
     public final String price;
+    public final Trade[] trades;
 
-    public Order(String id, String market, String clientOrderId, long createdAt, String orderType, String side, String status, String size, String price) {
+    public Order(String id, String market, String clientOrderId, long createdAt, String orderType, String side, String status, String size, String price, Trade[] trades) {
         this.id = id;
         this.market = market;
         this.clientOrderId = clientOrderId;
@@ -21,6 +24,7 @@ public class Order {
         this.status = status;
         this.size = size;
         this.price = price;
+        this.trades = trades;
     }
 
     @Override
@@ -35,6 +39,7 @@ public class Order {
                 ", status='" + status + '\'' +
                 ", size='" + size + '\'' +
                 ", price='" + price + '\'' +
+                ", trades=" + Arrays.toString(trades) + '\'' +
                 '}';
     }
 }
