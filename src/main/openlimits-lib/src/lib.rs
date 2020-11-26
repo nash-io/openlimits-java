@@ -247,9 +247,10 @@ fn orderbook_resp_to_jobject<'a>(env: &JNIEnv<'a>, resp: OrderBookResponse, mark
     market_pair,
     asks.into(),
     bids.into(),
-    JValue::Long(resp.last_update_id.unwrap_or_default() as i64)
+    JValue::Long(resp.last_update_id.unwrap_or_default() as i64),
+    JValue::Long(resp.update_id.unwrap_or_default() as i64),
   ];
-  env.new_object(cls_resp, "(Ljava/lang/String;[Lio/nash/openlimits/AskBid;[Lio/nash/openlimits/AskBid;J)V", ctor_args)
+  env.new_object(cls_resp, "(Ljava/lang/String;[Lio/nash/openlimits/AskBid;[Lio/nash/openlimits/AskBid;JJ)V", ctor_args)
 }
 
 
@@ -1237,6 +1238,7 @@ fn get_options_nash(
   let credentials = get_options_nash_credentials(env, nash)?;
   let client_id = get_long_default_with_default(env, nash, "clientId", 0)?;
   let environment = get_string_non_null(env, nash, "environment")?;
+  let affiliate_code = get_string(env, nash, "affiliateCode")?;
   let timeout = get_long_default_with_default(env, nash, "timeout", 1000)?;
 
   let environment = match environment.as_str() {
@@ -1251,7 +1253,8 @@ fn get_options_nash(
         credentials,
         client_id,
         environment,
-        timeout
+        timeout,
+        affiliate_code
       }
     )
   )
