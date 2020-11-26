@@ -3,8 +3,8 @@ plugins {
     id 'maven-publish'
 }
 
-group 'org.example'
-version '0.1.1'
+group 'io.nash'
+version '0.1.2'
 
 repositories {
     mavenCentral()
