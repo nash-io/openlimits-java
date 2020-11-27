@@ -1,12 +1,12 @@
 package io.nash.openlimits;
 
-import java.util.ArrayList;
+import java.util.Arrays;
 
 public class TradesResponse {
     public final String market;
-    public final ArrayList<Trade> trades;
+    public final Trade[] trades;
 
-    public TradesResponse(String market, ArrayList<Trade> trades) {
+    public TradesResponse(String market, Trade[] trades) {
         this.market = market;
         this.trades = trades;
     }
@@ -15,7 +15,7 @@ public class TradesResponse {
     public String toString() {
         return "TradesResponse{" +
                 "market='" + market + '\'' +
-                ", trades=" + trades +
+                ", trades=" + Arrays.toString(trades) +
                 '}';
     }
 }

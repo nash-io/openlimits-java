@@ -1,6 +1,7 @@
 package io.nash.openlimits;
 
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.function.Consumer;
@@ -50,11 +51,12 @@ public class ExchangeClient {
 
     }
     @SuppressWarnings("unused")
-    private void onTrades(TradesResponse trades) {
-        if (!this.onTradesCallbacks.containsKey(trades.market)) {
+    private void onTrades(String market, Trade[] trades) {
+        if (!this.onTradesCallbacks.containsKey(market)) {
             return;
         }
-        this.onTradesCallbacks.get(trades.market).forEach(callback -> callback.accept(trades));
+        TradesResponse tradesResponse = new TradesResponse(market, trades);
+        this.onTradesCallbacks.get(market).forEach(callback -> callback.accept(tradesResponse));
     }
 
     final private ArrayList<Consumer<OpenLimitsException>> onErrorCallbacks = new ArrayList<>();
@@ -177,12 +179,10 @@ public class ExchangeClient {
                 1000
         );
         final ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(config));
-        client.subscribeOrderbook("btc_usdc", (OrderbookResponse orderbook) -> {
-            System.out.println(orderbook);
-        });
 
-        client.subscribeOrderbook("noia_usdc", (OrderbookResponse orderbook) -> {
-            System.out.println(orderbook);
+
+        client.subscribeTrades("btc_usdc", (TradesResponse trades) -> {
+            System.out.println(trades);
         });
 
         client.subscribeError(err -> {
@@ -195,15 +195,6 @@ public class ExchangeClient {
         client.subscribeDisconnect(() -> {
             System.out.println("Resetting bot");
         });
-
-        client.cancelAllOrders(new CancelAllOrdersRequest("btc_usdc"));
-        client.limitSell(LimitRequest.goodTillCancelled(
-                "20110.1",
-                "0.00030260",
-                "btc_usdc"
-        ));
-        client.cancelAllOrders(new CancelAllOrdersRequest("btc_usdc"));
-        client.disconnect();
     }
 
     public static void main(String[] args) {
