@@ -447,7 +447,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
   std::thread::spawn(move|| {
     let env = jvm.attach_current_thread().expect("Failed to attach thread");
     let event_handler_cls = env.find_class(EVENT_HANDLER_CLS_NAME).unwrap();
-    let on_trades = env.get_method_id(event_handler_cls, "onTrades", "(Lio/nash/openlimits/TradesResponse;)V").unwrap();
+    let on_trades = env.get_method_id(event_handler_cls, "onTrades", "(Ljava/lang/String;[Lio/nash/openlimits/Trade;)V").unwrap();
     let on_orderbook = env.get_method_id(event_handler_cls, "onOrderbook", "(Lio/nash/openlimits/OrderbookResponse;)V").unwrap();
     let on_error = env.get_method_id(event_handler_cls, "onError", "(Lio/nash/openlimits/OpenLimitsException;)V").unwrap();
     let on_disconnect = env.get_method_id(event_handler_cls, "onDisconnect", "()V").unwrap();
@@ -504,11 +504,12 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
         OpenLimitsWebSocketMessage::Trades(trades) => {
           match vec_to_jobject(&env, TRADE_CLS_NAME, trades.clone(), trade_to_jobject) {
             Ok(trades) => {
+              let s = env.new_string(market_str).expect("failed to create a market strings");
               let res = env.call_method_unchecked(
                 client.as_obj(),
                 on_trades,
                 jni::signature::JavaType::Primitive(jni::signature::Primitive::Void),
-                &[trades.into()]
+                &[s.into(), trades.into()]
               );
 
               if res.is_err() {
