@@ -7,9 +7,6 @@ import java.util.HashMap;
 import java.util.function.Consumer;
 
 public class ExchangeClient {
-    static {
-        System.loadLibrary("openlimits_java");
-    }
     private ExchangeClientConfig config;
 
     @SuppressWarnings("unused")
