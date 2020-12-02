@@ -81,6 +81,8 @@ public class NashExchangeClientTest extends TestCase {
                 "0.10000",
                 "eth_btc"
         )));
+        System.out.println(client.marketSell(new MarketRequest("0.01000", "btc_usdc")));
+        System.out.println(client.marketSell(new MarketRequest("20", "usdc_btc")));
     }
 
     public void testCancelOrder() {
