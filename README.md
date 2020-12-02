@@ -6,7 +6,7 @@ Starting point for Openlimits wrapper in Java using rust-jni for java-python bin
 
 Make sure you have rust installed on your system.
 
-To build the library please run `./gradlew build`.
+To build the library please run `./gradlew assemble`.
 
 You will have the .jar file and shared library (.so, dylic, -dll) in the build/libs folder, which can be used in other projects.
 
