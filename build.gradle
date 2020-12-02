@@ -25,6 +25,9 @@ task copyNativeDeps {
     }
 }
 
+build.finalizedBy(buildNativeDeps)
+build.finalizedBy(copyNativeDeps)
+
 
 
 
