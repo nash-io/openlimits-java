@@ -1180,9 +1180,9 @@ dependencies = [
 
 [[package]]
 name = "nash-native-client"
-version = "0.1.9"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76bc09f2af4e21482fc973e41ba94e045ee6acf34fda91af9cc3efadcabc0e64"
+checksum = "2d5fe2207e058794d883f86eb61424aa7a3e002b04e6f6fcbfcb3c6161d9e06d"
 dependencies = [
  "chrono",
  "futures",
@@ -1197,9 +1197,9 @@ dependencies = [
 
 [[package]]
 name = "nash-protocol"
-version = "0.1.17"
+version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ac1af52c7f78ed68994db3ca1ae26bc6cbb9861f7ea3c7501be8404a4a3a7d7"
+checksum = "fcff460c0bec07666818682bca20d60f597fd9fad30039e4f0bb5fd5b30adae0"
 dependencies = [
  "Inflector",
  "async-trait",
@@ -1332,8 +1332,7 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 [[package]]
 name = "openlimits"
 version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fad143e3fcb3570a5e5586b0523fa605f551ca78824fdd731b3f0a23fb56c39e"
+source = "git+https://github.com/nash-io/openlimits?rev=3764ac1702c213f61c2de0ad53bac98987582f90#3764ac1702c213f61c2de0ad53bac98987582f90"
 dependencies = [
  "async-trait",
  "base64 0.12.3",

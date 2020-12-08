@@ -1,6 +1,6 @@
 use jni;
 use jni::{errors, JNIEnv};
-use jni::objects::{JClass, JValue, JObject, JString};
+use jni::objects::{JClass, JMethodID, JValue, JObject, JString};
 use jni::sys::{jsize, jobject};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 use rust_decimal::prelude::*;
@@ -18,6 +18,10 @@ use openlimits::{
   binance::{
     BinanceCredentials,
     BinanceParameters,
+  },
+  coinbase::{
+    CoinbaseCredentials,
+    CoinbaseParameters
   },
   model::{      
       OrderBookRequest, 
@@ -60,7 +64,7 @@ pub enum OpenlimitsJavaError {
   #[error("{0}")]
   OpenLimitsError(#[from] openlimits::errors::OpenLimitError),
   #[error("{0}")]
-  JNIError(#[from] jni::errors::Error)
+  JNIError(#[from] jni::errors::Error),
 }
 
 fn map_openlimits_error_class(err: &openlimits::errors::OpenLimitError) -> &'static str {
@@ -91,6 +95,7 @@ fn map_openlimits_error_class(err: &openlimits::errors::OpenLimitError) -> &'sta
     openlimits::errors::OpenLimitError::NotParsableResponse(_) => "Lio/nash/openlimits/NotParsableResponse;",
     openlimits::errors::OpenLimitError::MissingParameter(_) => "Lio/nash/openlimits/MissingParameter;",
     openlimits::errors::OpenLimitError::WebSocketMessageNotSupported() => "Lio/nash/openlimits/WebSocketMessageNotSupported;",
+    openlimits::errors::OpenLimitError::NoMarketPair => "Lio/nash/openlimits/NoMarketPair;",
   }
 }
 
@@ -114,7 +119,9 @@ static EVENT_HANDLER_CLS_NAME: &str = "Lio/nash/openlimits/ExchangeClient;";
 static ASK_BID_CLS_NAME: &str = "Lio/nash/openlimits/AskBid;";
 static BALANCE_CLS_NAME: &str = "Lio/nash/openlimits/Balance;";
 static BINANCE_CONFIG_CLS_NAME: &str = "Lio/nash/openlimits/BinanceConfig;";
+static COINBASE_CONFIG_CLS_NAME: &str = "Lio/nash/openlimits/CoinbaseConfig;";
 static BINANCE_CREDENTIALS_CLS_NAME: &str = "Lio/nash/openlimits/BinanceCredentials;";
+static COINBASE_CREDENTIALS_CLS_NAME: &str = "Lio/nash/openlimits/CoinbaseCredentials;";
 static CANDLE_CLS_NAME: &str = "Lio/nash/openlimits/Candle;";
 static MARKET_PAIR_CLS_NAME: &str = "Lio/nash/openlimits/MarketPair;";
 static NASH_CONFIG_CLS_NAME: &str = "Lio/nash/openlimits/NashConfig;";
@@ -273,6 +280,14 @@ fn string_to_jstring<'a>(env: &JNIEnv<'a>, s: String) -> errors::Result<JString<
   env.new_string(s)
 }
 
+
+fn optional_string_to_jstring<'a>(env: &JNIEnv<'a>, s: Option<String>) -> errors::Result<JValue<'a>> {
+  match s {
+    Some(s) => Ok(env.new_string(s)?.into()),
+    None => Ok(JObject::null().into())
+  }
+}
+
 fn side_to_string<'a>(env: &JNIEnv<'a>, s: Side) -> errors::Result<JString<'a>> {
   let s = match s {
     Side::Buy => "Buy",
@@ -300,7 +315,8 @@ fn trade_to_jobject<'a>(env: &JNIEnv<'a>, trade: Trade) -> errors::Result<JObjec
   let cls_trade = env.find_class(TRADE_CLS_NAME)?;
   let ctor_args = &[
     env.new_string(trade.id)?.into(),
-    env.new_string(trade.order_id)?.into(),
+    optional_string_to_jstring(env, trade.buyer_order_id)?,
+    optional_string_to_jstring(env, trade.seller_order_id)?,
     env.new_string(trade.market_pair)?.into(),
     decimal_to_jvalue(env, trade.price)?,
     decimal_to_jvalue(env, trade.qty)?,
@@ -310,7 +326,7 @@ fn trade_to_jobject<'a>(env: &JNIEnv<'a>, trade: Trade) -> errors::Result<JObjec
     JValue::Long(trade.created_at as i64)
   ];
 
-  env.new_object(cls_trade, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;FFFLjava/lang/String;Ljava/lang/String;J)V", ctor_args)
+  env.new_object(cls_trade, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;FFFLjava/lang/String;Ljava/lang/String;J)V", ctor_args)
 }
 
 fn ticker_to_jobject<'a>(env: &JNIEnv<'a>, resp: Ticker) -> errors::Result<JObject<'a>> {
@@ -435,23 +451,43 @@ enum JavaReportBackMsg {
   Error(openlimits::errors::OpenLimitError)
 }
 
-fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchange) {
-  let client = env.new_global_ref(cli).expect("Failed to create global ref");
+fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchange) -> OpenLimitsJavaResult<()> {
+  let client = env.new_global_ref(cli)?;
   
   let (sub_request_tx, mut sub_rx) = tokio::sync::mpsc::unbounded_channel::<SubthreadCmd>();
-  env.set_rust_field(cli, "_sub_tx", sub_request_tx).unwrap();
+  env.set_rust_field(cli, "_sub_tx", sub_request_tx)?;
   let (msg_request_tx, msg_rx) = std::sync::mpsc::sync_channel::<JavaReportBackMsg>(100);
 
 
-  let jvm = env.get_java_vm().expect("Failed to get java VM");
+  let jvm = env.get_java_vm()?;
+  let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
+  
+  let (finish_tx, finish_rx) = tokio::sync::oneshot::channel::<OpenLimitsJavaResult<()>>();
   std::thread::spawn(move|| {
-    let env = jvm.attach_current_thread().expect("Failed to attach thread");
-    let event_handler_cls = env.find_class(EVENT_HANDLER_CLS_NAME).unwrap();
-    let on_trades = env.get_method_id(event_handler_cls, "onTrades", "(Ljava/lang/String;[Lio/nash/openlimits/Trade;)V").unwrap();
-    let on_orderbook = env.get_method_id(event_handler_cls, "onOrderbook", "(Lio/nash/openlimits/OrderbookResponse;)V").unwrap();
-    let on_error = env.get_method_id(event_handler_cls, "onError", "(Lio/nash/openlimits/OpenLimitsException;)V").unwrap();
-    let on_disconnect = env.get_method_id(event_handler_cls, "onDisconnect", "()V").unwrap();
-    let on_ping = env.get_method_id(event_handler_cls, "onPing", "()V").unwrap();
+    let env = jvm.attach_current_thread().expect("Failed to attach inner thread to JVM");
+
+    let call = move || -> OpenLimitsJavaResult<(jni::AttachGuard, JMethodID, JMethodID, JMethodID, JMethodID, JMethodID)> {
+      let event_handler_cls = env.find_class(EVENT_HANDLER_CLS_NAME)?;
+      let on_trades = env.get_method_id(event_handler_cls, "onTrades", "(Ljava/lang/String;[Lio/nash/openlimits/Trade;)V")?;
+      let on_orderbook = env.get_method_id(event_handler_cls, "onOrderbook", "(Lio/nash/openlimits/OrderbookResponse;)V")?;
+      let on_error = env.get_method_id(event_handler_cls, "onError", "(Lio/nash/openlimits/OpenLimitsException;)V")?;
+      let on_disconnect = env.get_method_id(event_handler_cls, "onDisconnect", "()V")?;
+      let on_ping = env.get_method_id(event_handler_cls, "onPing", "()V")?;
+
+      Ok((env, on_trades, on_orderbook, on_error, on_disconnect, on_ping))
+    };
+    
+    let (env, on_trades, on_orderbook, on_error, on_disconnect, on_ping) = match call() {
+      Ok(res) => res,
+      Err(err) => {
+        finish_tx.send(Err(err)).expect("Failed to signal back client initialization status");
+        return;
+      }
+    };
+
+
+    finish_tx.send(Ok(())).expect("Failed to signal back client initialization status");
+    
     
     loop {
       let msg = msg_rx.recv();
@@ -464,16 +500,16 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
             &[]
           );
           if res.is_err() {
-            panic!("Failed to do callback: {}", res.err().unwrap());
+            panic!("Failed to do callback: {}", res.err().expect("Failed to serialize error string"));
           }
           break;
         },
         Ok(JavaReportBackMsg::Error(err)) => {
           let s = map_openlimits_error_class(&err);
           let msg = format!("{:?}", err);
-          let msg = env.new_string(msg).unwrap();
-          let cls = env.find_class(s).unwrap();
-          let inst = env.new_object(cls, "(Ljava/land/String)V", &[msg.into()]).unwrap();
+          let msg = env.new_string(msg).expect("Failed to convert error message to JString");
+          let cls = env.find_class(s).expect("Failed to find error class");
+          let inst = env.new_object(cls, "(Ljava/lang/String;)V", &[msg.into()]).expect("Failed to instantiate exception class");
           let res = env.call_method_unchecked(
             client.as_obj(),
             on_error,
@@ -481,7 +517,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
             &[inst.into()]
           );
           if res.is_err() {
-            panic!("Failed to do callback: {}", res.err().unwrap());
+            panic!("Failed to do callback: {}", res.err().expect("Failed to call back into java"));
           }
           continue;
         },
@@ -494,7 +530,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
             &[]
           );
           if res.is_err() {
-            panic!("Failed to do callback: {}", res.err().unwrap());
+            panic!("Failed to do callback: {}", res.err().expect("Failed to call back into java"));
           }
           break;
         },
@@ -513,7 +549,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
               );
 
               if res.is_err() {
-                panic!("Failed to do callback: {}", res.err().unwrap());
+                panic!("Failed to do callback: {}", res.err().expect("Failed to call back into java"));
               }
             },
             Err(e) => {
@@ -534,7 +570,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
               );
 
               if res.is_err() {
-                panic!("Failed to do callback: {}", res.err().unwrap());
+                panic!("Failed to do callback: {}", res.err().expect("Failed to call back into java"));
               }
             },
             Err(e) => {
@@ -551,7 +587,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
           );
 
           if res.is_err() {
-            panic!("Failed to do callback: {}", res.err().unwrap());
+            panic!("Failed to do callback: {}", res.err().expect("Failed to call back into java"));
           }
         },
         OpenLimitsWebSocketMessage::OrderBookDiff(orderbook) => {
@@ -567,7 +603,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
               );
 
               if res.is_err() {
-                panic!("Failed to do callback: {}", res.err().unwrap());
+                panic!("Failed to do callback: {}", res.err().expect("Failed to call back into java"));
               }
             },
             Err(e) => {
@@ -579,17 +615,34 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
     }
   });
 
-  let jvm = env.get_java_vm().expect("Failed to get java VM");
+  runtime.block_on(finish_rx).expect("Failed while waiting for exception thread to start")?;
+
+  let jvm = env.get_java_vm()?;
+  let (finish_tx, finish_rx) = tokio::sync::oneshot::channel::<OpenLimitsJavaResult<()>>();
   std::thread::spawn(move || {
-    jvm.attach_current_thread().expect("Failed to attach thread");
+    let call = move || -> OpenLimitsJavaResult<(tokio::runtime::Runtime, OpenLimitsWs<AnyWsExchange>)> {
+        jvm.attach_current_thread()?;
+        let mut rt = tokio::runtime::Builder::new()
+          .basic_scheduler()
+          .enable_all()
+          .build()
+          .map_err(|e| OpenlimitsJavaError::OpenLimitsError(openlimits::errors::OpenLimitError::IoError(e)))
+          ?;
+        let client: OpenLimitsWs<AnyWsExchange> = rt.block_on(OpenLimitsWs::instantiate(init_params.clone()))?;
 
-    let mut rt = tokio::runtime::Builder::new()
-                .basic_scheduler()
-                .enable_all()
-                .build().expect("Could not create Tokio runtime");
+        Ok((rt, client))
+    };
 
-    let client: OpenLimitsWs<AnyWsExchange> = rt.block_on(OpenLimitsWs::instantiate(init_params.clone()));
+    let (mut rt, client) = match call() {
+      Ok(res) => res,
+      Err(err) => {
+        finish_tx.send(Err(err)).expect("Failed to signal back client initialization status");
+        return;
+      }
+    };
 
+
+    finish_tx.send(Ok(())).expect("Failed to signal back client initialization status");
     loop {
       let subcmd = sub_rx.next();
       let next_msg = rt.block_on(subcmd);
@@ -598,7 +651,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
         Some(thread_cmd) => {
           match thread_cmd {
             SubthreadCmd::Disconnect => {
-              msg_request_tx.clone().send(JavaReportBackMsg::Disconnect).unwrap();
+              msg_request_tx.clone().send(JavaReportBackMsg::Disconnect).expect("Failed to send message to callback thread");
               break;
             },
             SubthreadCmd::Sub(sub) => {
@@ -624,7 +677,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
                         _ => openlimits::errors::OpenLimitError::SocketError(),
                     };
 
-                    sub_reporter_tx.send(JavaReportBackMsg::Error(err)).unwrap();
+                    sub_reporter_tx.send(JavaReportBackMsg::Error(err)).expect("Failed to send message to callback thread");
                     return;
                   }
                 };
@@ -640,14 +693,14 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
                   Subscription::Trades(e) => e.clone(),
                   _ => String::from("Unknown")
                 };
-                sub_reporter_tx.send(JavaReportBackMsg::Message(resp.clone(), market)).unwrap();
+                sub_reporter_tx.send(JavaReportBackMsg::Message(resp.clone(), market)).expect("Failed to send message to callback thread");
               }));
 
               match result {
                 Err(err) => {
                   let err_reporter_tx = msg_request_tx.clone();
-                  err_reporter_tx.send(JavaReportBackMsg::Error(err)).unwrap();
-                  msg_request_tx.clone().send(JavaReportBackMsg::Disconnect).unwrap();
+                  err_reporter_tx.send(JavaReportBackMsg::Error(err)).expect("Failed to send message to callback thread");
+                  msg_request_tx.clone().send(JavaReportBackMsg::Disconnect).expect("Failed to send message to callback thread");
                   break;
                 },
                 _ => {}
@@ -659,6 +712,9 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
       }
     }
   });
+  let thread = runtime.block_on(finish_rx).expect("Failed while waiting for subscription thread to");
+
+  thread
 }
 
 #[no_mangle]
@@ -669,12 +725,12 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_init(env: JNIEnv, 
     let mut runtime = tokio::runtime::Builder::new().basic_scheduler().enable_all().build().expect("Failed to set up Tokio runtime");
     
     let client_future = OpenLimits::instantiate(init_params.clone());
-    let client: AnyExchange = runtime.block_on(client_future);
+    let client: AnyExchange = runtime.block_on(client_future)?;
 
     env.set_rust_field(cli, "_config", init_params)?;
     env.set_rust_field(cli, "_client", client)?;
     env.set_rust_field(cli, "_runtime", runtime)?;
-    init_ws(env, _class, cli, ws_params);
+    init_ws(env, _class, cli, ws_params)?;
     Ok(())
   };
 
@@ -1298,16 +1354,55 @@ fn get_options_binance(
   )
 }
 
+fn get_options_coinbase_credentials(
+  env: &JNIEnv,
+  coinbase: &JObject,
+) -> Result<Option<CoinbaseCredentials>, String> {
+  let credentials_opt = get_object(&env, coinbase, "credentials",  COINBASE_CREDENTIALS_CLS_NAME)?;
+  credentials_opt.map(|credentials| {
+    let api_key = get_string_non_null(&env, &credentials, "apiKey")?;
+    let api_secret = get_string_non_null(&env, &credentials, "apiSecret")?;
+    let passphrase = get_string_non_null(&env, &credentials, "passphrase")?;
+    Ok(
+      CoinbaseCredentials {
+        api_key,
+        api_secret,
+        passphrase
+      }
+    )
+  }).transpose()
+}
+
+fn get_options_coinbase(
+  env: &JNIEnv,
+  coinbase: &JObject,
+) -> Result<InitAnyExchange, String> {
+
+  let credentials = get_options_coinbase_credentials(env, coinbase)?;
+  let sandbox = get_field(env, coinbase, "sandbox",  "Z")?.unwrap().z().unwrap();
+
+  Ok(
+    InitAnyExchange::Coinbase(
+      CoinbaseParameters {
+        credentials,
+        sandbox
+      }
+    )
+  )
+}
+
 fn get_options(
   env: &JNIEnv,
   opts: &JObject,
 ) -> Result<InitAnyExchange, String> {
   let nash = get_object(&env, opts, "nash",  NASH_CONFIG_CLS_NAME)?;
   let binance = get_object(&env, opts, "binance",  BINANCE_CONFIG_CLS_NAME)?;
-  match (nash, binance) {
-    (Some(nash), _) => get_options_nash(&env, &nash),
-    (_, Some(binance)) => get_options_binance(&env, &binance),
+  let coinbase = get_object(&env, opts, "coinbase",  COINBASE_CONFIG_CLS_NAME)?;
+  match (nash, binance, coinbase) {
+    (Some(nash), _, _) => get_options_nash(&env, &nash),
+    (_, Some(binance), _) => get_options_binance(&env, &binance),
+    (_, _, Some(coinbase)) => get_options_coinbase(&env, &coinbase),
     // (_, Ok(binance)) => {},
-    _ => Err(String::from("Invalid config, nash and binance field both null"))
+    _ => Err(String::from("Invalid config, no config found"))
   }
 }
