@@ -18,34 +18,33 @@ package example;
 import io.nash.openlimits.*;
 
 public class Example {
-    static {
-        System.loadLibrary("openlimits_java");
-    }
 
     public static void main(String[] args) {
-        String apiKey = System.getenv("NASH_API_KEY");
-        String secret = System.getenv("NASH_API_SECRET");
-        NashConfig nashConfig = new NashConfig(
-                new NashCredentials(
-                        secret,
-                        apiKey
-                ),
+        String apiKey = System.getenv("NASH_API_SESSION_PROD");
+        String secret = System.getenv("NASH_API_SECRET_PROD");
+        NashConfig config = new NashConfig(
+                new NashCredentials(secret, apiKey),
                 0,
-                "sandbox",
-                10000
+                "production",
+                1000
         );
-        ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(nashConfig));
-        client.setSubscriptionCallback(new OpenLimitsEventHandler() {
-            @Override
-            public void onOrderbook(OrderbookResponse orderbook) {
-                System.out.println(orderbook);
-            }
-            @Override
-            public void onError() {
-                System.out.println("Disconnected. Restarting bot.");
-            }
+        final ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(config));
+
+
+        client.subscribeTrades("btc_usdc", (TradesResponse trades) -> {
+            System.out.println(trades);
         });
-        client.subscribe(Subscription.orderbook("btc_usdc", 5));
+
+        client.subscribeError(err -> {
+            System.out.println("Experienced an error, cleaning up");
+            client.cancelAllOrders(new CancelAllOrdersRequest("btc_usdc"));
+            client.cancelAllOrders(new CancelAllOrdersRequest("noia_usdc"));
+            client.disconnect();
+        });
+
+        client.subscribeDisconnect(() -> {
+            System.out.println("Resetting bot");
+        });
     }
 }
 ```
