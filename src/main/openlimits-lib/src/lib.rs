@@ -69,45 +69,45 @@ pub enum OpenlimitsJavaError {
 
 fn map_openlimits_error_class(err: &openlimits::errors::OpenLimitError) -> &'static str {
   match err {
-    openlimits::errors::OpenLimitError::BinanceError(_) => "Lio/nash/openlimits/BinanceError;",
-    openlimits::errors::OpenLimitError::CoinbaseError(_) => "Lio/nash/openlimits/CoinbaseError;",
-    openlimits::errors::OpenLimitError::NashProtocolError(_) => "Lio/nash/openlimits/NashProtocolError;",
-    openlimits::errors::OpenLimitError::MissingImplementation(_) => "Lio/nash/openlimits/MissingImplementation;",
-    openlimits::errors::OpenLimitError::AssetNotFound() => "Lio/nash/openlimits/AssetNotFound;",
-    openlimits::errors::OpenLimitError::NoApiKeySet() => "Lio/nash/openlimits/NoApiKeySet;",
-    openlimits::errors::OpenLimitError::InternalServerError() => "Lio/nash/openlimits/InternalServerError;",
-    openlimits::errors::OpenLimitError::ServiceUnavailable() => "Lio/nash/openlimits/ServiceUnavailable;",
-    openlimits::errors::OpenLimitError::Unauthorized() => "Lio/nash/openlimits/Unauthorized;",
-    openlimits::errors::OpenLimitError::SymbolNotFound() => "Lio/nash/openlimits/SymbolNotFound;",
-    openlimits::errors::OpenLimitError::SocketError() => "Lio/nash/openlimits/SocketError;",
-    openlimits::errors::OpenLimitError::GetTimestampFailed() => "Lio/nash/openlimits/GetTimestampFailed;",
-    openlimits::errors::OpenLimitError::ReqError(_) => "Lio/nash/openlimits/ReqError;",
-    openlimits::errors::OpenLimitError::InvalidHeaderError(_) => "Lio/nash/openlimits/InvalidHeaderError;",
-    openlimits::errors::OpenLimitError::InvalidPayloadSignature(_) => "Lio/nash/openlimits/InvalidPayloadSignature;",
-    openlimits::errors::OpenLimitError::IoError(_) => "Lio/nash/openlimits/IoError;",
-    openlimits::errors::OpenLimitError::PoisonError() => "Lio/nash/openlimits/PoisonError;",
-    openlimits::errors::OpenLimitError::JsonError(_) => "Lio/nash/openlimits/JsonError;",
-    openlimits::errors::OpenLimitError::ParseFloatError(_) => "Lio/nash/openlimits/ParseFloatError;",
-    openlimits::errors::OpenLimitError::UrlParserError(_) => "Lio/nash/openlimits/UrlParserError;",
-    openlimits::errors::OpenLimitError::Tungstenite(_) => "Lio/nash/openlimits/Tungstenite;",
-    openlimits::errors::OpenLimitError::TimestampError(_) => "Lio/nash/openlimits/TimestampError;",
-    openlimits::errors::OpenLimitError::UnkownResponse(_) => "Lio/nash/openlimits/UnkownResponse;",
-    openlimits::errors::OpenLimitError::NotParsableResponse(_) => "Lio/nash/openlimits/NotParsableResponse;",
-    openlimits::errors::OpenLimitError::MissingParameter(_) => "Lio/nash/openlimits/MissingParameter;",
-    openlimits::errors::OpenLimitError::WebSocketMessageNotSupported() => "Lio/nash/openlimits/WebSocketMessageNotSupported;",
-    openlimits::errors::OpenLimitError::NoMarketPair => "Lio/nash/openlimits/NoMarketPair;",
+    openlimits::errors::OpenLimitError::BinanceError(_) => "io/nash/openlimits/BinanceError",
+    openlimits::errors::OpenLimitError::CoinbaseError(_) => "io/nash/openlimits/CoinbaseError",
+    openlimits::errors::OpenLimitError::NashProtocolError(_) => "io/nash/openlimits/NashProtocolError",
+    openlimits::errors::OpenLimitError::MissingImplementation(_) => "io/nash/openlimits/MissingImplementation",
+    openlimits::errors::OpenLimitError::AssetNotFound() => "io/nash/openlimits/AssetNotFound",
+    openlimits::errors::OpenLimitError::NoApiKeySet() => "io/nash/openlimits/NoApiKeySet",
+    openlimits::errors::OpenLimitError::InternalServerError() => "io/nash/openlimits/InternalServerError",
+    openlimits::errors::OpenLimitError::ServiceUnavailable() => "io/nash/openlimits/ServiceUnavailable",
+    openlimits::errors::OpenLimitError::Unauthorized() => "io/nash/openlimits/Unauthorized",
+    openlimits::errors::OpenLimitError::SymbolNotFound() => "io/nash/openlimits/SymbolNotFound",
+    openlimits::errors::OpenLimitError::SocketError() => "io/nash/openlimits/SocketError",
+    openlimits::errors::OpenLimitError::GetTimestampFailed() => "io/nash/openlimits/GetTimestampFailed",
+    openlimits::errors::OpenLimitError::ReqError(_) => "io/nash/openlimits/ReqError",
+    openlimits::errors::OpenLimitError::InvalidHeaderError(_) => "io/nash/openlimits/InvalidHeaderError",
+    openlimits::errors::OpenLimitError::InvalidPayloadSignature(_) => "io/nash/openlimits/InvalidPayloadSignature",
+    openlimits::errors::OpenLimitError::IoError(_) => "io/nash/openlimits/IoError",
+    openlimits::errors::OpenLimitError::PoisonError() => "io/nash/openlimits/PoisonError",
+    openlimits::errors::OpenLimitError::JsonError(_) => "io/nash/openlimits/JsonError",
+    openlimits::errors::OpenLimitError::ParseFloatError(_) => "io/nash/openlimits/ParseFloatError",
+    openlimits::errors::OpenLimitError::UrlParserError(_) => "io/nash/openlimits/UrlParserError",
+    openlimits::errors::OpenLimitError::Tungstenite(_) => "io/nash/openlimits/Tungstenite",
+    openlimits::errors::OpenLimitError::TimestampError(_) => "io/nash/openlimits/TimestampError",
+    openlimits::errors::OpenLimitError::UnkownResponse(_) => "io/nash/openlimits/UnkownResponse",
+    openlimits::errors::OpenLimitError::NotParsableResponse(_) => "io/nash/openlimits/NotParsableResponse",
+    openlimits::errors::OpenLimitError::MissingParameter(_) => "io/nash/openlimits/MissingParameter",
+    openlimits::errors::OpenLimitError::WebSocketMessageNotSupported() => "io/nash/openlimits/WebSocketMessageNotSupported",
+    openlimits::errors::OpenLimitError::NoMarketPair => "io/nash/openlimits/NoMarketPair",
   }
 }
 
 fn map_error_to_error_class(err: &OpenlimitsJavaError) -> &'static str {
   match err {
-    OpenlimitsJavaError::InvalidArgument(_) => "Lio/nash/openlimits/InvalidArgument;",
+    OpenlimitsJavaError::InvalidArgument(_) => "io/nash/openlimits/InvalidArgument",
     OpenlimitsJavaError::OpenLimitsError(e) => map_openlimits_error_class(e),
     OpenlimitsJavaError::JNIError(e) => {
       match e {
-        jni::errors::Error::NullPtr(_) => "Ljava/lang/NullPointerException;",
-        jni::errors::Error::NullDeref(_) => "Ljava/lang/NullPointerException;",
-        _ => "Ljava/lang/Exception;"
+        jni::errors::Error::NullPtr(_) => "java/lang/NullPointerException",
+        jni::errors::Error::NullDeref(_) => "java/lang/NullPointerException",
+        _ => "java/lang/RuntimeException"
       }
     }
   }
@@ -381,6 +381,11 @@ fn order_to_jobject<'a>(env: &JNIEnv<'a>, order: Order) -> errors::Result<JObjec
 
 fn vec_to_jobject<'a, T, F>(env: &JNIEnv<'a>, cls: &str, entries: Vec<T>, f: F) -> errors::Result<JObject<'a>>
   where F: Fn(&JNIEnv<'a>,T) -> errors::Result<JObject<'a>> {
+  if entries.len() == 0 {
+    let out = env.new_object_array(0, cls, JObject::null())?;
+
+    return Ok(JObject::from(out));
+  }
   let pairs_maybe: errors::Result<Vec<_>> = entries.into_iter().map(|v| f(env, v)).collect();
   let pairs = pairs_maybe?;
   let pairs_cls = env.find_class(cls)?;
@@ -767,9 +772,7 @@ fn handle_jobject_result(env: JNIEnv, result: OpenLimitsJavaResult<JObject>) -> 
   match result {
     Ok(obj) => obj.into_inner(),
     Err(err) => {
-      let s = map_error_to_error_class(&err);
-      let msg = format!("{:?}", err);
-      env.throw_new(env.find_class(s).expect(format!("Failed to find class {} {}", s, msg).as_str()), msg).expect("Failed to raise exception");
+      handle_void_result(env, Err(err));
       JObject::null().into_inner()
     }
   }
@@ -779,9 +782,15 @@ fn handle_void_result(env: JNIEnv, result: OpenLimitsJavaResult<()>) {
   match result {
     Ok(_) => {},
     Err(err) => {
-      let s = map_error_to_error_class(&err);
+      
+      if env.exception_check().unwrap() {
+        return;
+      }
+      
+      let class_name = map_error_to_error_class(&err);
       let msg = format!("{:?}", err);
-      env.throw_new(env.find_class(s).expect(format!("Failed to find class {} {}", s, msg).as_str()), msg).expect("Failed to raise exception");
+      
+      env.throw((class_name, msg)).expect(format!("Failed to raise exception: {}", class_name).as_str());
     }
   }
 }
@@ -934,7 +943,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getOrderHistory(en
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
     let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
     let req = get_order_history_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
-
     let resp = runtime.block_on(client.get_order_history(&req))?;
     let out = vec_to_jobject(&env, ORDER_CLS_NAME, resp, order_to_jobject)?;
     Ok(out)
@@ -946,7 +954,7 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getOrderHistory(en
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getOrder(env: JNIEnv, _class: JClass,  cli: JObject, req: JObject) -> jobject {
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
-    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime").expect("Failed to get runtime");
+    let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
     let req = get_order_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
 
     let resp = runtime.block_on(client.get_order(&req))?;

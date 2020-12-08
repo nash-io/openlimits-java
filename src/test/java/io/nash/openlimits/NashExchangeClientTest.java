@@ -25,6 +25,24 @@ public class NashExchangeClientTest extends TestCase {
         client = new ExchangeClient(new ExchangeClientConfig(nashConfig));
     }
 
+    public void testCanCatchInvalidConfig() {
+        try {
+            NashConfig nashConfig = new NashConfig(
+                    new NashCredentials(
+                            "abssdasd",
+                            "invalid "
+                    ),
+                    0,
+                    "sandbox",
+                    10000
+            );
+            new ExchangeClient(new ExchangeClientConfig(nashConfig));
+            fail("Expected to get an exception");
+        } catch(OpenLimitsException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
     public void testOrderBook() {
         System.out.println(client.orderBook("btc_usdc"));
     }
@@ -71,7 +89,7 @@ public class NashExchangeClientTest extends TestCase {
     }
 
     public void testTrading() {
-        System.out.println(client.limitSell(LimitRequest.goodTillCancelled(
+        /*System.out.println(client.limitSell(LimitRequest.goodTillCancelled(
                 "6500.0",
                 "0.10000",
                 "btc_usdc"
@@ -82,7 +100,7 @@ public class NashExchangeClientTest extends TestCase {
                 "eth_btc"
         )));
         System.out.println(client.marketSell(new MarketRequest("0.01000", "btc_usdc")));
-        System.out.println(client.marketSell(new MarketRequest("20", "usdc_btc")));
+        System.out.println(client.marketSell(new MarketRequest("20", "usdc_btc")));*/
     }
 
     public void testCancelOrder() {
