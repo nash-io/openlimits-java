@@ -21,7 +21,7 @@ public class BinanceExchangeClientTest extends TestCase {
 
         client = new ExchangeClient(new ExchangeClientConfig(config));
     }
-    public  void testError() {
+    public void testError() {
         try {
             client.getHistoricRates(new GetHistoryRatesRequest("sadsdqwe", "OneHour"));
             fail("Expected to get an exception");
@@ -116,9 +116,7 @@ public class BinanceExchangeClientTest extends TestCase {
                 null
         ))));
     }
-    public void testGetBalances() {
-        System.out.println(Arrays.toString(client.getAccountBalances(null)));
-    }
+
 
 
     public void testCancelAllOrders() {
@@ -135,6 +133,10 @@ public class BinanceExchangeClientTest extends TestCase {
         System.out.println(
                 Arrays.toString(client.cancelAllOrders(new CancelAllOrdersRequest("BNBBTC")))
         );
+    }
+
+    public void testGetBalances() {
+        System.out.println(Arrays.toString(client.getAccountBalances(null)));
     }
     public void testReceivePairs() {
         System.out.println(Arrays.toString(client.receivePairs()));

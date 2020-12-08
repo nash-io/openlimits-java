@@ -89,7 +89,7 @@ public class NashExchangeClientTest extends TestCase {
     }
 
     public void testTrading() {
-        /*System.out.println(client.limitSell(LimitRequest.goodTillCancelled(
+        System.out.println(client.limitSell(LimitRequest.goodTillCancelled(
                 "6500.0",
                 "0.10000",
                 "btc_usdc"
@@ -100,7 +100,7 @@ public class NashExchangeClientTest extends TestCase {
                 "eth_btc"
         )));
         System.out.println(client.marketSell(new MarketRequest("0.01000", "btc_usdc")));
-        System.out.println(client.marketSell(new MarketRequest("20", "usdc_btc")));*/
+        System.out.println(client.marketSell(new MarketRequest("20", "usdc_btc")));
     }
 
     public void testCancelOrder() {
