@@ -25,6 +25,24 @@ public class NashExchangeClientTest extends TestCase {
         client = new ExchangeClient(new ExchangeClientConfig(nashConfig));
     }
 
+    public void testCanCatchInvalidConfig() {
+        try {
+            NashConfig nashConfig = new NashConfig(
+                    new NashCredentials(
+                            "abssdasd",
+                            "invalid "
+                    ),
+                    0,
+                    "sandbox",
+                    10000
+            );
+            new ExchangeClient(new ExchangeClientConfig(nashConfig));
+            fail("Expected to get an exception");
+        } catch(OpenLimitsException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
     public void testOrderBook() {
         System.out.println(client.orderBook("btc_usdc"));
     }
