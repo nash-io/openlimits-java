@@ -179,9 +179,8 @@ public class ExchangeClient {
         );
         final ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(config));
 
-
-        client.subscribeTrades("btc_usdc", (TradesResponse trades) -> {
-            System.out.println(trades);
+        client.subscribeOrderbook("btc_usdc", (orders) -> {
+            System.out.println(orders);
         });
 
         client.subscribeError(err -> {
