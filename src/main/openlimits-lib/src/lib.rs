@@ -184,17 +184,19 @@ fn get_string(env: &JNIEnv, obj: &JObject, field: &str) -> Result<Option<String>
   }
 }
 
-fn get_long_nullable(
-  env: &JNIEnv,
-  obj: &JObject,
+fn get_long_treat_zero_as_none<'a>(
+  env: &'a JNIEnv,
+  obj: &'a JObject,
   field: &str,
 ) -> Result<Option<u64>, String> {
-  let f = get_field(env, obj, field,  "J")?;
-  match f {
-    None => Ok(None),
-    Some(f) => {
-      let long = f.j().map_err(|_| format!("{} not long", field))?;
-      return Ok(Some(long as u64))
+  let f = env.get_field(*obj, field, "J").map_err(|_| format!("Failed to get field {}", field))?;
+  match f.j() {
+    Err(_) => Err(format!("Expecting long for field {}", field)),
+    Ok(f) => {
+      if f == 0 {
+        return Ok(None)
+      }
+      return Ok(Some(f as u64))
     }
   }
 }
@@ -510,8 +512,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
       }
     };
 
-
-    let abort = || {
+    let raise_exception = || {
       // These two excepts would usually signify the JVM is in some really weird state
       if env.exception_check().expect("Cannot get exception state of JVM") {
         return;
@@ -520,7 +521,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
     };
 
     if finish_tx.send(Ok(())).is_err() {
-      abort();
+      raise_exception();
       return;
     };
     
@@ -536,7 +537,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
             &[]
           );
           if res.is_err() {
-            abort();
+            raise_exception();
             return;
           }
           break;
@@ -557,7 +558,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
             )
           };
           if call().is_err() {
-            abort();
+            raise_exception();
             return;
           }
           continue;
@@ -570,7 +571,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
             &[]
           );
           if res.is_err() {
-            abort();
+            raise_exception();
             return;
           }
           break;
@@ -593,12 +594,12 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
               };
 
               if call().is_err() {
-                abort();
+                raise_exception();
                 return;
               }
             },
             Err(_) => {
-              abort();
+              raise_exception();
               return;
             }
           };
@@ -616,7 +617,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
           };
 
           if call().is_err() {
-            abort();
+            raise_exception();
             return; 
           }
         },
@@ -629,7 +630,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
           );
 
           if res.is_err() {
-            abort();
+            raise_exception();
             return;
           }
         },
@@ -645,7 +646,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
             )
           };
           if call().is_err() {
-            abort();
+            raise_exception();
             return;
           }
         },
@@ -668,6 +669,13 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
       },
       Ok(e) => e
     };
+    let raise_exception = || {
+      if env.exception_check().expect("Cannot get exception state of JVM") {
+        return;
+      }
+      env.throw_new("java/lang/RuntimeException", "Aborting execution").expect("Failed to raise exception");
+    };
+
     let call = move || -> OpenLimitsJavaResult<(tokio::runtime::Runtime, OpenLimitsWs<AnyWsExchange>)> {
         let mut rt = tokio::runtime::Builder::new()
           .basic_scheduler()
@@ -685,28 +693,23 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
       Err(err) => {
         if finish_tx.send(Err(err)).is_err() {
           // We failed to report to main thread that initialization has failed. Abort and attempt to shutdown callback thread
-          msg_request_tx.clone().send(JavaReportBackMsg::Disconnect).expect("Failed to send message to callback thread");
+          if msg_request_tx.clone().send(JavaReportBackMsg::Disconnect).is_err() {
+            raise_exception();
+          }
         };
         return;
       }
     };
 
+    
+
     if finish_tx.send(Ok(())).is_err() {
       // We failed to report to main thread that initialization has failed. Abort and attempt to shutdown callback thread
-      msg_request_tx.clone().send(JavaReportBackMsg::Disconnect).expect("Failed to send message to callback thread");
-      return;
-    }
-
-
-    let handle_send_result = |e: Result<(), std::sync::mpsc::SendError<JavaReportBackMsg>>| {
-      if e.is_ok() {
-        return;
-      };
-      if env.exception_check().expect("Cannot get exception state of JVM") {
-        return;
+      if msg_request_tx.clone().send(JavaReportBackMsg::Disconnect).is_err() {
+        raise_exception();
       }
-      env.throw_new("java/lang/RuntimeException", "Aborting execution").expect("Failed to raise exception");
-    };
+      return;
+    }    
 
     loop {
       let subcmd = sub_rx.next();
@@ -716,7 +719,9 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
         Some(thread_cmd) => {
           match thread_cmd {
             SubthreadCmd::Disconnect => {
-              handle_send_result(msg_request_tx.clone().send(JavaReportBackMsg::Disconnect));
+              if msg_request_tx.clone().send(JavaReportBackMsg::Disconnect).is_err() {
+                raise_exception();
+              }
               return;
             },
             SubthreadCmd::Sub(sub, writer) => {
@@ -742,6 +747,8 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
                         openlimits::errors::OpenLimitError::PoisonError() => openlimits::errors::OpenLimitError::PoisonError(),
                         _ => openlimits::errors::OpenLimitError::SocketError(),
                     };
+
+                    // Not sure how to raise an JVM exception here. The subscription handlers have some odd traits
                     sub_reporter_tx.send(JavaReportBackMsg::Error(err)).expect("Failed to send message to callback thread");
                     return;
                   }
@@ -758,9 +765,13 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
                   Subscription::Trades(e) => e.clone(),
                   _ => String::from("Unknown")
                 };
+
+                // Not sure how to raise an JVM exception here. The subscription handlers have some odd traits
                 sub_reporter_tx.send(JavaReportBackMsg::Message(resp.clone(), market)).expect("Failed to send message to callback thread");
               }));
-              writer.send(result).expect("Failed to report back callback result");
+              if writer.send(result).is_err() {
+                raise_exception();
+              }
             },
           }
         },
@@ -772,7 +783,9 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
   let wait_for_result = runtime.block_on(finish_rx);
   if wait_for_result.is_err() {
     // Send a disconnect signal to callback thread to exit cleanly
-    main_thread_message_request_tx.clone().send(JavaReportBackMsg::Disconnect).expect("Cannot shutdown listener thread");
+    if main_thread_message_request_tx.clone().send(JavaReportBackMsg::Disconnect).is_err() {
+      println!("Cannot shutdown listener threads");
+    };
   }
   return wait_for_result.map_err(|e| OpenlimitsJavaError::InitializeException(e.to_string()))?;
 }
@@ -1135,17 +1148,17 @@ fn get_paginator(
   env: &JNIEnv,
   paginator: &JObject
 ) -> Result<Paginator, String> {
-  let start_time = get_long_nullable(env, paginator, "startTime")?;
-  let end_time = get_long_nullable(env, paginator, "endTime")?;
-  let limit = get_long_nullable(env, paginator, "limit")?;
+  let start_time = get_long_treat_zero_as_none(env, paginator, "startTime")?;
+  let end_time = get_long_treat_zero_as_none(env, paginator, "endTime")?;
+  let limit = get_long_treat_zero_as_none(env, paginator, "limit")?;
   let before = get_string(env, paginator, "before")?;
   let after = get_string(env, paginator, "after")?;
 
   Ok(
     Paginator {
-      start_time: start_time.map(|v| v as u64 ),
-      end_time: end_time.map(|v| v as u64 ),
-      limit: limit.map(|v| v as u64 ),
+      start_time,
+      end_time,
+      limit,
       before,
       after
     }
