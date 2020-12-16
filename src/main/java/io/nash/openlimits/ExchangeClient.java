@@ -1,6 +1,6 @@
 package io.nash.openlimits;
 
-
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.function.Consumer;
@@ -34,6 +34,7 @@ public class ExchangeClient {
     @SuppressWarnings("unused")
     private void onDisconnect() {
         this.onDisconnectCallbacks.forEach(Runnable::run);
+        this.disposeClient(this);
     }
 
     @SuppressWarnings("unused")
@@ -85,6 +86,8 @@ public class ExchangeClient {
 
     native private void subscribe(ExchangeClient client, Subscription subscription);
     native private void disconnect(ExchangeClient client);
+    native private void disposeClient(ExchangeClient client);
+    native private void simulateSocketError(ExchangeClient client);
 
     native private void init(ExchangeClient client, ExchangeClientConfig conf);
     public void subscribeTrades(String market, Consumer<TradesResponse> onTrades) {
@@ -113,6 +116,10 @@ public class ExchangeClient {
     }
     public void disconnect() {
         this.disconnect(this);
+    }
+
+    public void simulateSocketError() {
+        this.simulateSocketError(this);
     }
 
     public Order limitBuy(LimitRequest request) {
@@ -167,35 +174,37 @@ public class ExchangeClient {
         this.config = conf;
         this.init(this, conf);
     }
-
-    public static void run() {
+    public static void run() throws InterruptedException, IOException {
         String apiKey = System.getenv("NASH_API_SESSION_PROD");
         String secret = System.getenv("NASH_API_SECRET_PROD");
         NashConfig config = new NashConfig(
                 new NashCredentials(secret, apiKey),
                 0,
-                "production",
+                "sandbox",
                 1000
         );
         final ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(config));
-
-        client.subscribeOrderbook("btc_usdc", (orders) -> {
-            System.out.println(orders);
+        client.subscribeDisconnect(() -> {
+            System.out.println("Disconnect");
         });
-
         client.subscribeError(err -> {
-            System.out.println("Experienced an error, cleaning up");
-            client.cancelAllOrders(new CancelAllOrdersRequest("btc_usdc"));
-            client.cancelAllOrders(new CancelAllOrdersRequest("noia_usdc"));
+            System.out.println("err: " + err);
             client.disconnect();
         });
-
-        client.subscribeDisconnect(() -> {
-            System.out.println("Resetting bot");
+        client.subscribeOrderbook("btc_usdc", orderbook -> {
+            System.out.println(orderbook);
         });
+
+        Thread.sleep(5000);
+        client.simulateSocketError();
+
     }
 
     public static void main(String[] args) {
-        run();
+        try {
+            run();
+        } catch(InterruptedException | IOException e) {
+
+        }
     }
 }

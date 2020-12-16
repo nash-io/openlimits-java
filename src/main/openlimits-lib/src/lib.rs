@@ -66,40 +66,40 @@ pub enum OpenlimitsJavaError {
   #[error("Failed to subscribe: {0}")]
   SubscribeException(String),
   #[error("{0}")]
-  OpenLimitsError(#[from] openlimits::errors::OpenLimitError),
+  OpenLimitsError(#[from] openlimits::errors::OpenLimitsError),
   #[error("{0}")]
   JNIError(#[from] jni::errors::Error),
 }
 
-fn map_openlimits_error_class(err: &openlimits::errors::OpenLimitError) -> &'static str {
+fn map_openlimits_error_class(err: &openlimits::errors::OpenLimitsError) -> &'static str {
   match err {
-    openlimits::errors::OpenLimitError::BinanceError(_) => "io/nash/openlimits/BinanceError",
-    openlimits::errors::OpenLimitError::CoinbaseError(_) => "io/nash/openlimits/CoinbaseError",
-    openlimits::errors::OpenLimitError::NashProtocolError(_) => "io/nash/openlimits/NashProtocolError",
-    openlimits::errors::OpenLimitError::MissingImplementation(_) => "io/nash/openlimits/MissingImplementation",
-    openlimits::errors::OpenLimitError::AssetNotFound() => "io/nash/openlimits/AssetNotFound",
-    openlimits::errors::OpenLimitError::NoApiKeySet() => "io/nash/openlimits/NoApiKeySet",
-    openlimits::errors::OpenLimitError::InternalServerError() => "io/nash/openlimits/InternalServerError",
-    openlimits::errors::OpenLimitError::ServiceUnavailable() => "io/nash/openlimits/ServiceUnavailable",
-    openlimits::errors::OpenLimitError::Unauthorized() => "io/nash/openlimits/Unauthorized",
-    openlimits::errors::OpenLimitError::SymbolNotFound() => "io/nash/openlimits/SymbolNotFound",
-    openlimits::errors::OpenLimitError::SocketError() => "io/nash/openlimits/SocketError",
-    openlimits::errors::OpenLimitError::GetTimestampFailed() => "io/nash/openlimits/GetTimestampFailed",
-    openlimits::errors::OpenLimitError::ReqError(_) => "io/nash/openlimits/ReqError",
-    openlimits::errors::OpenLimitError::InvalidHeaderError(_) => "io/nash/openlimits/InvalidHeaderError",
-    openlimits::errors::OpenLimitError::InvalidPayloadSignature(_) => "io/nash/openlimits/InvalidPayloadSignature",
-    openlimits::errors::OpenLimitError::IoError(_) => "io/nash/openlimits/IoError",
-    openlimits::errors::OpenLimitError::PoisonError() => "io/nash/openlimits/PoisonError",
-    openlimits::errors::OpenLimitError::JsonError(_) => "io/nash/openlimits/JsonError",
-    openlimits::errors::OpenLimitError::ParseFloatError(_) => "io/nash/openlimits/ParseFloatError",
-    openlimits::errors::OpenLimitError::UrlParserError(_) => "io/nash/openlimits/UrlParserError",
-    openlimits::errors::OpenLimitError::Tungstenite(_) => "io/nash/openlimits/Tungstenite",
-    openlimits::errors::OpenLimitError::TimestampError(_) => "io/nash/openlimits/TimestampError",
-    openlimits::errors::OpenLimitError::UnkownResponse(_) => "io/nash/openlimits/UnkownResponse",
-    openlimits::errors::OpenLimitError::NotParsableResponse(_) => "io/nash/openlimits/NotParsableResponse",
-    openlimits::errors::OpenLimitError::MissingParameter(_) => "io/nash/openlimits/MissingParameter",
-    openlimits::errors::OpenLimitError::WebSocketMessageNotSupported() => "io/nash/openlimits/WebSocketMessageNotSupported",
-    openlimits::errors::OpenLimitError::NoMarketPair => "io/nash/openlimits/NoMarketPair",
+    openlimits::errors::OpenLimitsError::BinanceError(_) => "io/nash/openlimits/BinanceError",
+    openlimits::errors::OpenLimitsError::CoinbaseError(_) => "io/nash/openlimits/CoinbaseError",
+    openlimits::errors::OpenLimitsError::NashProtocolError(_) => "io/nash/openlimits/NashProtocolError",
+    openlimits::errors::OpenLimitsError::MissingImplementation(_) => "io/nash/openlimits/MissingImplementation",
+    openlimits::errors::OpenLimitsError::AssetNotFound() => "io/nash/openlimits/AssetNotFound",
+    openlimits::errors::OpenLimitsError::NoApiKeySet() => "io/nash/openlimits/NoApiKeySet",
+    openlimits::errors::OpenLimitsError::InternalServerError() => "io/nash/openlimits/InternalServerError",
+    openlimits::errors::OpenLimitsError::ServiceUnavailable() => "io/nash/openlimits/ServiceUnavailable",
+    openlimits::errors::OpenLimitsError::Unauthorized() => "io/nash/openlimits/Unauthorized",
+    openlimits::errors::OpenLimitsError::SymbolNotFound() => "io/nash/openlimits/SymbolNotFound",
+    openlimits::errors::OpenLimitsError::SocketError() => "io/nash/openlimits/SocketError",
+    openlimits::errors::OpenLimitsError::GetTimestampFailed() => "io/nash/openlimits/GetTimestampFailed",
+    openlimits::errors::OpenLimitsError::ReqError(_) => "io/nash/openlimits/ReqError",
+    openlimits::errors::OpenLimitsError::InvalidHeaderError(_) => "io/nash/openlimits/InvalidHeaderError",
+    openlimits::errors::OpenLimitsError::InvalidPayloadSignature(_) => "io/nash/openlimits/InvalidPayloadSignature",
+    openlimits::errors::OpenLimitsError::IoError(_) => "io/nash/openlimits/IoError",
+    openlimits::errors::OpenLimitsError::PoisonError() => "io/nash/openlimits/PoisonError",
+    openlimits::errors::OpenLimitsError::JsonError(_) => "io/nash/openlimits/JsonError",
+    openlimits::errors::OpenLimitsError::ParseFloatError(_) => "io/nash/openlimits/ParseFloatError",
+    openlimits::errors::OpenLimitsError::UrlParserError(_) => "io/nash/openlimits/UrlParserError",
+    openlimits::errors::OpenLimitsError::Tungstenite(_) => "io/nash/openlimits/Tungstenite",
+    openlimits::errors::OpenLimitsError::TimestampError(_) => "io/nash/openlimits/TimestampError",
+    openlimits::errors::OpenLimitsError::UnkownResponse(_) => "io/nash/openlimits/UnkownResponse",
+    openlimits::errors::OpenLimitsError::NotParsableResponse(_) => "io/nash/openlimits/NotParsableResponse",
+    openlimits::errors::OpenLimitsError::MissingParameter(_) => "io/nash/openlimits/MissingParameter",
+    openlimits::errors::OpenLimitsError::WebSocketMessageNotSupported() => "io/nash/openlimits/WebSocketMessageNotSupported",
+    openlimits::errors::OpenLimitsError::NoMarketPair => "io/nash/openlimits/NoMarketPair",
   }
 }
 
@@ -458,17 +458,18 @@ fn market_pair_to_jobject<'a>(env: &JNIEnv<'a>, pair: MarketPair) -> errors::Res
   env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", ctor_args)
 }
 
-type SubResult = std::result::Result<openlimits::exchange_ws::CallbackHandle, openlimits::errors::OpenLimitError>;
+type SubResult = std::result::Result<openlimits::exchange_ws::CallbackHandle, openlimits::errors::OpenLimitsError>;
 type SubChannel = tokio::sync::oneshot::Sender<SubResult>;
 enum SubthreadCmd {
   Sub(Subscription, SubChannel),
+  SimulateError,
   Disconnect
 }
 
 enum JavaReportBackMsg {
   Disconnect,
   Message(OpenLimitsWebSocketMessage, String),
-  Error(openlimits::errors::OpenLimitError)
+  Error(openlimits::errors::OpenLimitsError)
 }
 
 fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchange) -> OpenLimitsJavaResult<()> {
@@ -530,16 +531,6 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
       let (msg, market_str) = match msg {
         Ok(JavaReportBackMsg::Message(msg, market)) => (msg, market),
         Ok(JavaReportBackMsg::Disconnect) => {
-          let res = env.call_method_unchecked(
-            client.as_obj(),
-            on_disconnect,
-            jni::signature::JavaType::Primitive(jni::signature::Primitive::Void),
-            &[]
-          );
-          if res.is_err() {
-            raise_exception();
-            return;
-          }
           break;
         },
         Ok(JavaReportBackMsg::Error(err)) => {
@@ -559,22 +550,30 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
           };
           if call().is_err() {
             raise_exception();
-            return;
+            continue;
           }
           continue;
         },
         Err(_) => {
-          let res = env.call_method_unchecked(
-            client.as_obj(),
-            on_disconnect,
-            jni::signature::JavaType::Primitive(jni::signature::Primitive::Void),
-            &[]
-          );
-          if res.is_err() {
+          let s = "io/nash/openlimits/SocketError";
+          let msg = format!("Failed to receive message");
+          let client_inst = client.as_obj();
+          let call = || -> jni::errors::Result<JValue> {
+            let msg = env.new_string(msg)?;
+            let cls = env.find_class(s)?;
+            let inst = env.new_object(cls, "(Ljava/lang/String;)V", &[msg.into()])?;
+            env.call_method_unchecked(
+              client_inst,
+              on_error,
+              jni::signature::JavaType::Primitive(jni::signature::Primitive::Void),
+              &[inst.into()]
+            )
+          };
+          if call().is_err() {
             raise_exception();
-            return;
+            continue;
           }
-          break;
+          continue;
         },
       };
 
@@ -595,14 +594,15 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
 
               if call().is_err() {
                 raise_exception();
-                return;
+                continue;
               }
             },
             Err(_) => {
               raise_exception();
-              return;
+              continue;
             }
           };
+          continue
         },
         OpenLimitsWebSocketMessage::OrderBook(orderbook) => {
           let call = || -> jni::errors::Result<JValue> {
@@ -618,8 +618,9 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
 
           if call().is_err() {
             raise_exception();
-            return; 
+            continue; 
           }
+          continue; 
         },
         OpenLimitsWebSocketMessage::Ping => {
           let res = env.call_method_unchecked(
@@ -631,8 +632,9 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
 
           if res.is_err() {
             raise_exception();
-            return;
+            continue;
           }
+          continue; 
         },
         OpenLimitsWebSocketMessage::OrderBookDiff(orderbook) => {
           let call = || -> jni::errors::Result<JValue> {
@@ -647,10 +649,20 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
           };
           if call().is_err() {
             raise_exception();
-            return;
+            continue;
           }
+          continue
         },
       };
+    }
+    let res = env.call_method_unchecked(
+      client.as_obj(),
+      on_disconnect,
+      jni::signature::JavaType::Primitive(jni::signature::Primitive::Void),
+      &[]
+    );
+    if res.is_err() {
+      raise_exception();
     }
   });
 
@@ -681,7 +693,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
           .basic_scheduler()
           .enable_all()
           .build()
-          .map_err(|e| OpenlimitsJavaError::OpenLimitsError(openlimits::errors::OpenLimitError::IoError(e)))
+          .map_err(|e| OpenlimitsJavaError::OpenLimitsError(openlimits::errors::OpenLimitsError::IoError(e)))
           ?;
         let client: OpenLimitsWs<AnyWsExchange> = rt.block_on(OpenLimitsWs::instantiate(init_params.clone()))?;
 
@@ -700,16 +712,13 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
         return;
       }
     };
-
-    
-
     if finish_tx.send(Ok(())).is_err() {
       // We failed to report to main thread that initialization has failed. Abort and attempt to shutdown callback thread
       if msg_request_tx.clone().send(JavaReportBackMsg::Disconnect).is_err() {
         raise_exception();
       }
       return;
-    }    
+    }
 
     loop {
       let subcmd = sub_rx.next();
@@ -718,6 +727,11 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
       match next_msg {
         Some(thread_cmd) => {
           match thread_cmd {
+            SubthreadCmd::SimulateError => {
+              if msg_request_tx.clone().send(JavaReportBackMsg::Error(openlimits::errors::OpenLimitsError::SocketError())).is_err() {
+                raise_exception();
+              }
+            },
             SubthreadCmd::Disconnect => {
               if msg_request_tx.clone().send(JavaReportBackMsg::Disconnect).is_err() {
                 raise_exception();
@@ -732,20 +746,20 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
                   Ok(e) => e,
                   Err(err) => {
                     let err = match err {
-                        openlimits::errors::OpenLimitError::UnkownResponse(e) => openlimits::errors::OpenLimitError::UnkownResponse(e.clone()),
-                        openlimits::errors::OpenLimitError::NotParsableResponse(e) => openlimits::errors::OpenLimitError::NotParsableResponse(e.clone()),
-                        openlimits::errors::OpenLimitError::MissingParameter(e) => openlimits::errors::OpenLimitError::MissingParameter(e.clone()),
-                        openlimits::errors::OpenLimitError::AssetNotFound() => openlimits::errors::OpenLimitError::AssetNotFound(),
-                        openlimits::errors::OpenLimitError::NoApiKeySet() => openlimits::errors::OpenLimitError::NoApiKeySet(),
-                        openlimits::errors::OpenLimitError::InternalServerError() => openlimits::errors::OpenLimitError::InternalServerError(),
-                        openlimits::errors::OpenLimitError::ServiceUnavailable() => openlimits::errors::OpenLimitError::ServiceUnavailable(),
-                        openlimits::errors::OpenLimitError::Unauthorized() => openlimits::errors::OpenLimitError::Unauthorized(),
-                        openlimits::errors::OpenLimitError::SymbolNotFound() => openlimits::errors::OpenLimitError::SymbolNotFound(),
-                        openlimits::errors::OpenLimitError::SocketError() => openlimits::errors::OpenLimitError::SocketError(),
-                        openlimits::errors::OpenLimitError::WebSocketMessageNotSupported() => openlimits::errors::OpenLimitError::WebSocketMessageNotSupported(),
-                        openlimits::errors::OpenLimitError::GetTimestampFailed() => openlimits::errors::OpenLimitError::GetTimestampFailed(),
-                        openlimits::errors::OpenLimitError::PoisonError() => openlimits::errors::OpenLimitError::PoisonError(),
-                        _ => openlimits::errors::OpenLimitError::SocketError(),
+                        openlimits::errors::OpenLimitsError::UnkownResponse(e) => openlimits::errors::OpenLimitsError::UnkownResponse(e.clone()),
+                        openlimits::errors::OpenLimitsError::NotParsableResponse(e) => openlimits::errors::OpenLimitsError::NotParsableResponse(e.clone()),
+                        openlimits::errors::OpenLimitsError::MissingParameter(e) => openlimits::errors::OpenLimitsError::MissingParameter(e.clone()),
+                        openlimits::errors::OpenLimitsError::AssetNotFound() => openlimits::errors::OpenLimitsError::AssetNotFound(),
+                        openlimits::errors::OpenLimitsError::NoApiKeySet() => openlimits::errors::OpenLimitsError::NoApiKeySet(),
+                        openlimits::errors::OpenLimitsError::InternalServerError() => openlimits::errors::OpenLimitsError::InternalServerError(),
+                        openlimits::errors::OpenLimitsError::ServiceUnavailable() => openlimits::errors::OpenLimitsError::ServiceUnavailable(),
+                        openlimits::errors::OpenLimitsError::Unauthorized() => openlimits::errors::OpenLimitsError::Unauthorized(),
+                        openlimits::errors::OpenLimitsError::SymbolNotFound() => openlimits::errors::OpenLimitsError::SymbolNotFound(),
+                        openlimits::errors::OpenLimitsError::SocketError() => openlimits::errors::OpenLimitsError::SocketError(),
+                        openlimits::errors::OpenLimitsError::WebSocketMessageNotSupported() => openlimits::errors::OpenLimitsError::WebSocketMessageNotSupported(),
+                        openlimits::errors::OpenLimitsError::GetTimestampFailed() => openlimits::errors::OpenLimitsError::GetTimestampFailed(),
+                        openlimits::errors::OpenLimitsError::PoisonError() => openlimits::errors::OpenLimitsError::PoisonError(),
+                        _ => openlimits::errors::OpenLimitsError::SocketError(),
                     };
 
                     // Not sure how to raise an JVM exception here. The subscription handlers have some odd traits
@@ -755,7 +769,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
                 };
                 let resp = match resp {
                   WebSocketResponse::Generic(msg) => msg,
-                  _ => {
+                  WebSocketResponse::Raw(_) => {
                     return;
                   }
                 };
@@ -796,7 +810,7 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_init(env: JNIEnv, 
     let init_params = get_options(&env, &conf).map_err(OpenlimitsJavaError::InvalidArgument)?;
     let ws_params = init_params.clone();
     let mut runtime = tokio::runtime::Builder::new().basic_scheduler().enable_all().build()
-      .map_err(|e| OpenlimitsJavaError::OpenLimitsError(openlimits::errors::OpenLimitError::IoError(e)))?;
+      .map_err(|e| OpenlimitsJavaError::OpenLimitsError(openlimits::errors::OpenLimitsError::IoError(e)))?;
     
     let client_future = OpenLimits::instantiate(init_params.clone());
     let client: AnyExchange = runtime.block_on(client_future)?;
@@ -850,7 +864,33 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_disconnect(env: JN
       ),
       _ => Ok(())
     }?;
+    Ok(())
+  };
+  handle_void_result(env, call());
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_disposeClient(env: JNIEnv, _class: JClass,  cli: JObject) {
+  let call = move || -> OpenLimitsJavaResult<()> {
     std::mem::drop(env.take_rust_field(cli, "_client")?);
+    Ok(())
+  };
+  handle_void_result(env, call());
+}
+
+
+
+
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_simulateSocketError(env: JNIEnv, _class: JClass,  cli: JObject) {
+  let call = move || -> OpenLimitsJavaResult<()> {
+    let sub_request_tx: MutexGuard<tokio::sync::mpsc::UnboundedSender<SubthreadCmd>> = env.get_rust_field(cli, "_sub_tx")?;
+    match sub_request_tx.send(SubthreadCmd::SimulateError) {
+      Err(e) => Err(
+        OpenlimitsJavaError::SubscribeException(e.to_string())
+      ),
+      _ => Ok(())
+    }?;
     Ok(())
   };
   handle_void_result(env, call());

@@ -17,4 +17,4 @@ futures-util = "0.3"
 jni = "0.18.0"
 rust_decimal = "1.7.0"
 thiserror = "1.0.22"
-openlimits = { rev = "3764ac1702c213f61c2de0ad53bac98987582f90", git = "https://github.com/nash-io/openlimits" }
+openlimits = { rev = "1f01eac7772d84c082556fcac81368a92c43d2bb", git = "https://github.com/nash-io/openlimits" }
