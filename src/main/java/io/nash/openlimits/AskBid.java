@@ -2,10 +2,10 @@ package io.nash.openlimits;
 
 
 public class AskBid {
-    public final float price;
-    public final float qty;
+    public final String price;
+    public final String qty;
 
-    public AskBid(float price, float qty) {
+    public AskBid(String price, String qty) {
         this.price = price;
         this.qty = qty;
     }

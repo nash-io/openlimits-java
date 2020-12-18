@@ -2,13 +2,13 @@ package io.nash.openlimits;
 
 public class Candle {
     public final long time;
-    public final float low;
-    public final float high;
-    public final float open;
-    public final float close;
-    public final float volume;
+    public final String low;
+    public final String high;
+    public final String open;
+    public final String close;
+    public final String volume;
 
-    public Candle(long time, float low, float high, float open, float close, float volume) {
+    public Candle(long time, String low, String high, String open, String close, String volume) {
         this.time = time;
         this.low = low;
         this.high = high;
