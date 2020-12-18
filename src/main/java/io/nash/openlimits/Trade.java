@@ -7,16 +7,16 @@ public class Trade {
     // nullable
     public final String sellerOrderId;
     public final String marketPair;
-    public final float price;
-    public final float qty;
+    public final String price;
+    public final String qty;
     // nullable
-    public final float fees;
+    public final String fees;
     public final String side;
     // nullable
     public final String liquidity;
     public final long createdAt;
 
-    public Trade(String id, String buyerOrderId, String sellerOrderId, String marketPair, float price, float qty, float fees, String side, String liquidity, long createdAt) {
+    public Trade(String id, String buyerOrderId, String sellerOrderId, String marketPair, String price, String qty, String fees, String side, String liquidity, long createdAt) {
         this.id = id;
         this.buyerOrderId = buyerOrderId;
         this.sellerOrderId = sellerOrderId;

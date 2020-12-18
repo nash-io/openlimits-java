@@ -1,9 +1,9 @@
 package io.nash.openlimits;
 
 public class Ticker {
-    public final float price;
+    public final String price;
 
-    public Ticker(float price) {
+    public Ticker(String price) {
         this.price = price;
     }
 

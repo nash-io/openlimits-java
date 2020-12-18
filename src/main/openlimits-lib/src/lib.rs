@@ -2,7 +2,7 @@ use jni;
 use jni::{errors, JNIEnv};
 use jni::objects::{JClass, JMethodID, JValue, JObject, JString};
 use jni::sys::{jsize, jobject};
-use rust_decimal::{Decimal, prelude::ToPrimitive};
+use rust_decimal::{Decimal};
 use rust_decimal::prelude::*;
 use chrono::Duration;
 use openlimits::{
@@ -141,8 +141,8 @@ static TRADE_CLS_NAME: &str = "Lio/nash/openlimits/Trade;";
 
 static STRING_CLS_NAME: &str = "Ljava/lang/String;";
 
-fn decimal_to_jvalue<'a>(_env: &JNIEnv<'a>, s: Decimal) -> errors::Result<JValue<'a>> {
-  Ok(JValue::Float(s.to_f32().unwrap_or_default()))
+fn decimal_to_jvalue<'a>(env: &JNIEnv<'a>, s: Decimal) -> errors::Result<JValue<'a>> {
+  env.new_string(s.to_string()).map(|e|e.into())
 }
 
 fn get_field<'a>(
@@ -246,7 +246,7 @@ fn bidask_to_jobject<'a>(env: &JNIEnv<'a>, resp: AskBid) -> errors::Result<JObje
     decimal_to_jvalue(env, resp.qty)?,
   ];
 
-  env.new_object(cls_bidask, "(FF)V", ctor_args)
+  env.new_object(cls_bidask, "(Ljava/lang/String;Ljava/lang/String;)V", ctor_args)
 }
 
 fn vec_to_java_arr<'a>(env: &JNIEnv<'a>, cls: JClass, v: &Vec<JObject<'a>>) -> errors::Result<JValue<'a>> {
@@ -286,7 +286,7 @@ fn candle_to_jobject<'a>(env: &JNIEnv<'a>, candle: Candle) -> errors::Result<JOb
     decimal_to_jvalue(env, candle.volume)?
   ];
 
-  env.new_object(cls_candle, "(JFFFFF)V", ctor_args)
+  env.new_object(cls_candle, "(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", ctor_args)
 }
 
 fn string_to_jstring<'a>(env: &JNIEnv<'a>, s: String) -> errors::Result<JString<'a>> {
@@ -333,13 +333,13 @@ fn trade_to_jobject<'a>(env: &JNIEnv<'a>, trade: Trade) -> errors::Result<JObjec
     env.new_string(trade.market_pair)?.into(),
     decimal_to_jvalue(env, trade.price)?,
     decimal_to_jvalue(env, trade.qty)?,
-    trade.fees.map_or(Ok(JValue::Float(0.0)), |f| decimal_to_jvalue(env, f))?,
+    trade.fees.map_or(Ok(JObject::null().into()), |f| decimal_to_jvalue(env, f))?,
     side_to_string(env, trade.side)?.into(),
     trade.liquidity.map_or(Ok(JObject::null()), |l| liquidity_to_string(env, l))?.into(),
     JValue::Long(trade.created_at as i64)
   ];
 
-  env.new_object(cls_trade, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;FFFLjava/lang/String;Ljava/lang/String;J)V", ctor_args)
+  env.new_object(cls_trade, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)V", ctor_args)
 }
 
 fn ticker_to_jobject<'a>(env: &JNIEnv<'a>, resp: Ticker) -> errors::Result<JObject<'a>> {
@@ -347,7 +347,7 @@ fn ticker_to_jobject<'a>(env: &JNIEnv<'a>, resp: Ticker) -> errors::Result<JObje
   let ctor_args = &[
     decimal_to_jvalue(env, resp.price.unwrap_or_default())?
   ];
-  env.new_object(cls_resp, "(F)V", ctor_args)
+  env.new_object(cls_resp, "(Ljava/lang/String;)V", ctor_args)
 }
 
 fn order_type_to_string(typ: OrderType) -> &'static str {
@@ -1456,7 +1456,7 @@ fn get_options_nash(
         credentials,
         client_id,
         environment,
-        timeout,
+        timeout: std::time::Duration::from_millis(timeout),
         affiliate_code
       }
     )
