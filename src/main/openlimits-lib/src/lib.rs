@@ -872,7 +872,7 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_disconnect(env: JN
 #[no_mangle]
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_disposeClient(env: JNIEnv, _class: JClass,  cli: JObject) {
   let call = move || -> OpenLimitsJavaResult<()> {
-    std::mem::drop(env.take_rust_field(cli, "_client")?);
+    env.take_rust_field(cli, "_client")?;
     Ok(())
   };
   handle_void_result(env, call());

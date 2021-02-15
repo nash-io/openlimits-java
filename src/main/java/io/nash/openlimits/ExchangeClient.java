@@ -180,19 +180,17 @@ public class ExchangeClient {
         NashConfig config = new NashConfig(
                 new NashCredentials(secret, apiKey),
                 0,
-                "sandbox",
+                "production",
                 1000
         );
+
         final ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(config));
         client.subscribeDisconnect(() -> {
             System.out.println("Disconnect");
         });
-        client.subscribeError(err -> {
-            System.out.println("err: " + err);
-            client.disconnect();
-        });
         client.subscribeOrderbook("btc_usdc", orderbook -> {
             System.out.println(orderbook);
+            client.disconnect();
         });
 
     }
