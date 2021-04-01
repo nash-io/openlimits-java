@@ -100,6 +100,7 @@ fn map_openlimits_error_class(err: &openlimits::errors::OpenLimitsError) -> &'st
     openlimits::errors::OpenLimitsError::MissingParameter(_) => "io/nash/openlimits/MissingParameter",
     openlimits::errors::OpenLimitsError::WebSocketMessageNotSupported() => "io/nash/openlimits/WebSocketMessageNotSupported",
     openlimits::errors::OpenLimitsError::NoMarketPair => "io/nash/openlimits/NoMarketPair",
+    openlimits::errors::OpenLimitsError::InvalidParameter(_) => "io/nash/openlimits/InvalidParameter"
   }
 }
 
@@ -1306,7 +1307,8 @@ fn get_order_history_request(
   Ok(
     GetOrderHistoryRequest {
       paginator,
-      market_pair
+      market_pair,
+      order_status: None
     }
   )
 }
@@ -1457,7 +1459,8 @@ fn get_options_nash(
         client_id,
         environment,
         timeout: std::time::Duration::from_millis(timeout),
-        affiliate_code
+        affiliate_code,
+        sign_states_loop_interval: None
       }
     )
   )
