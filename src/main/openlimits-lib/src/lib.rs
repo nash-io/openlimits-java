@@ -53,7 +53,7 @@ use openlimits::{
       websocket::{Subscription, OpenLimitsWebSocketMessage, WebSocketResponse}
   }
 };
-use tokio::stream::StreamExt;
+//use tokio::stream::StreamExt;
 use std::sync::MutexGuard;
 use thiserror::Error;
 
@@ -477,7 +477,8 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
   let client = env.new_global_ref(cli)?;
   
   let (sub_request_tx, mut sub_rx) = tokio::sync::mpsc::unbounded_channel::<SubthreadCmd>();
-  env.set_rust_field(cli, "_sub_tx", sub_request_tx)?;
+  //@Hermano (Obs: Inseguro porque vaza memória. Ref: https://docs.rs/jni/0.19.0/jni/struct.JNIEnv.html#method.set_rust_field)
+  env.set_rust_field(cli, "_sub_tx", sub_request_tx)?; 
   let (msg_request_tx, msg_rx) = std::sync::mpsc::sync_channel::<JavaReportBackMsg>(100);
   let main_thread_message_request_tx = msg_request_tx.clone();
 
@@ -690,12 +691,19 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
     };
 
     let call = move || -> OpenLimitsJavaResult<(tokio::runtime::Runtime, OpenLimitsWs<AnyWsExchange>)> {
-        let mut rt = tokio::runtime::Builder::new()
-          .basic_scheduler()
+        //let mut rt = tokio::runtime::Builder::new()
+        //  .basic_scheduler()
+        //  .enable_all()
+        //  .build()
+        //  .map_err(|e| OpenlimitsJavaError::OpenLimitsError(openlimits::errors::OpenLimitsError::IoError(e)))
+        //  ?;
+        //@Hermano, alterei aqui.
+        let mut rt = tokio::runtime::Builder::new_current_thread()
           .enable_all()
           .build()
           .map_err(|e| OpenlimitsJavaError::OpenLimitsError(openlimits::errors::OpenLimitsError::IoError(e)))
           ?;
+          
         let client: OpenLimitsWs<AnyWsExchange> = rt.block_on(OpenLimitsWs::instantiate(init_params.clone()))?;
 
         Ok((rt, client))
@@ -810,8 +818,13 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_init(env: JNIEnv, 
   let call = move || -> OpenLimitsJavaResult<()> {
     let init_params = get_options(&env, &conf).map_err(OpenlimitsJavaError::InvalidArgument)?;
     let ws_params = init_params.clone();
-    let mut runtime = tokio::runtime::Builder::new().basic_scheduler().enable_all().build()
-      .map_err(|e| OpenlimitsJavaError::OpenLimitsError(openlimits::errors::OpenLimitsError::IoError(e)))?;
+    //let mut runtime = tokio::runtime::Builder::new().basic_scheduler().enable_all().build()
+    //  .map_err(|e| OpenlimitsJavaError::OpenLimitsError(openlimits::errors::OpenLimitsError::IoError(e)))?;
+    //@Hermano, alterei aqui.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+          .enable_all()
+          .build()
+          .map_err(|e| OpenlimitsJavaError::OpenLimitsError(openlimits::errors::OpenLimitsError::IoError(e)))?;
     
     let client_future = OpenLimits::instantiate(init_params.clone());
     let client: AnyExchange = runtime.block_on(client_future)?;
