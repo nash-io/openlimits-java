@@ -23,6 +23,9 @@ public class ExchangeClient {
     @SuppressWarnings("unused")
     private long _sub_tx;
 
+    @SupressWarnings("unused")
+    private long _thread_manager;
+
     @SuppressWarnings("unused")
     private long _handler_tx;
 

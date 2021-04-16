@@ -473,6 +473,18 @@ enum JavaReportBackMsg {
   Error(openlimits::errors::OpenLimitsError)
 }
 
+pub struct ThreadManager {
+  msg_request_tx: tokio::sync::mpsc::SyncSender<JavaReportBackMsg>,
+  sub_request_tx: tokio::sync::mpsc::UnboundedSender<SubthreadCmd>
+}
+
+impl Drop for ThreadManager {
+  fn drop(mut self) {
+    tx0.send(JavaReportBackMsg::Disconnect);
+    tx1.send(SubthreadCmd::Disconnect);
+  }
+}
+
 fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchange) -> OpenLimitsJavaResult<()> {
   let client = env.new_global_ref(cli)?;
   
@@ -480,6 +492,12 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
   env.set_rust_field(cli, "_sub_tx", sub_request_tx)?;
   let (msg_request_tx, msg_rx) = std::sync::mpsc::sync_channel::<JavaReportBackMsg>(100);
   let main_thread_message_request_tx = msg_request_tx.clone();
+
+  let thread_manager = ThreadManager {
+    msg_request_tx: msg_request_tx.clone(),
+    sub_request_tx: sub_request_tx.clone()
+  };
+  env.set_rust_field(env, "_thread_manager", thread_manager)?;
 
   let jvm = env.get_java_vm()?;
   let mut runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
