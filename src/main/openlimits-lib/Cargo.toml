@@ -18,3 +18,4 @@ jni = "0.18.0"
 rust_decimal = "1.7.0"
 thiserror = "1.0.22"
 openlimits = { version = "0.1.12" }
+lazy_static = "1.4.0"
