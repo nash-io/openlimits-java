@@ -496,13 +496,7 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
 
   let jvm = env.get_java_vm()?;
 
-  //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-  //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
   let runtime = &RUNTIME;
-  
-  // Signal used to sync initializating of the callback thread
-
-  //DESCOMENTAR
 
   let (finish_tx, finish_rx) = tokio::sync::oneshot::channel::<OpenLimitsJavaResult<()>>();
   
@@ -837,14 +831,10 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_init(env: JNIEnv, 
 
     env.set_rust_field(cli, "_config", init_params)?;
     env.set_rust_field(cli, "_client", client)?;
-    //env.set_rust_field(cli, "_runtime", RUNTIME)?;
-    init_ws(env, _class, cli, ws_params)?; //DESCOMENTAR
+    init_ws(env, _class, cli, ws_params)?; 
     Ok(())
   };
 
-  /* APAGAR*/
-  println!("Cliente criado!");
-  /* ------ */
   handle_void_result(env, call());
 }
 
@@ -853,12 +843,9 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_subscribe(env: JNI
   let call = move || -> OpenLimitsJavaResult<()> {
     let sub_request_tx: MutexGuard<tokio::sync::mpsc::UnboundedSender<SubthreadCmd>> = env.get_rust_field(cli, "_sub_tx")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
     
     let sub = get_subscription(&env, &sub).map_err(OpenlimitsJavaError::InvalidArgument)?;
-
 
     let (finish_tx, finish_rx) = tokio::sync::oneshot::channel::<SubResult>();
     match sub_request_tx.send(SubthreadCmd::Sub(sub, finish_tx)) {
@@ -960,8 +947,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_orderBook(env: JNI
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let market_pair_jstring = env.get_string(market)?;
@@ -983,8 +968,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getPriceTicker(env
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let req = GetPriceTickerRequest {
@@ -1005,8 +988,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getHistoricRates(e
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let req = get_historic_rates_request(&env, &hist_req).map_err(OpenlimitsJavaError::InvalidArgument)?;
@@ -1025,8 +1006,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getHistoricTrades(
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let req = get_historic_trades_request(&env, &trades_req).map_err(OpenlimitsJavaError::InvalidArgument)?;
@@ -1044,8 +1023,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_limitBuy(env: JNIE
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let req = get_limit_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
@@ -1061,8 +1038,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_limitSell(env: JNI
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let req = get_limit_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
@@ -1079,8 +1054,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_marketBuy(env: JNI
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let req = get_market_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
@@ -1096,8 +1069,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_marketSell(env: JN
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let req = get_market_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
@@ -1113,8 +1084,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getAllOpenOrders(e
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let resp = runtime.block_on(client.get_all_open_orders())?;
@@ -1130,8 +1099,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getOrderHistory(en
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let req = get_order_history_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
@@ -1147,8 +1114,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getOrder(env: JNIE
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let req = get_order_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
@@ -1165,8 +1130,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getTradeHistory(en
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
     
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let req = get_trade_history_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
@@ -1183,8 +1146,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_getAccountBalances
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let req = match req.is_null() {
@@ -1206,8 +1167,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_cancelOrder(env: J
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let req = get_cancel_order_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
@@ -1226,8 +1185,6 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_cancelAllOrders(en
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
 
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
     let runtime = &RUNTIME;
 
     let req = get_cancel_all_orders_request(&env, &req).map_err(OpenlimitsJavaError::InvalidArgument)?;
@@ -1245,9 +1202,7 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_cancelAllOrders(en
 pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_receivePairs(env: JNIEnv, _class: JClass,  cli: JObject) -> jobject {
   let call = move || -> OpenLimitsJavaResult<JObject> {
     let client: MutexGuard<AnyExchange> = env.get_rust_field(cli, "_client")?;
-
-    //let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
-    //Pode causar DEAD LOCK (Usar MutexGuard<RUNTIME>)
+    
     let runtime = &RUNTIME;
     
     let resp = runtime.block_on(client.retrieve_pairs())?;
