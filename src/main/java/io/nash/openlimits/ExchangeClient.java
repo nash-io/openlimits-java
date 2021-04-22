@@ -12,6 +12,9 @@ public class ExchangeClient {
     private ExchangeClientConfig config;
 
     @SuppressWarnings("unused")
+    private long _thread_manager;
+
+    @SuppressWarnings("unused")
     private long _config;
 
     @SuppressWarnings("unused")
@@ -22,6 +25,9 @@ public class ExchangeClient {
 
     @SuppressWarnings("unused")
     private long _sub_tx;
+
+    @SupressWarnings("unused")
+    private long _thread_manager;
 
     @SuppressWarnings("unused")
     private long _handler_tx;
@@ -87,6 +93,7 @@ public class ExchangeClient {
     native private void subscribe(ExchangeClient client, Subscription subscription);
     native private void disconnect(ExchangeClient client);
     native private void disposeClient(ExchangeClient client);
+    native private void closeClient(ExchangeClient client);
     native private void simulateSocketError(ExchangeClient client);
 
     native private void init(ExchangeClient client, ExchangeClientConfig conf);
@@ -193,6 +200,10 @@ public class ExchangeClient {
             client.disconnect();
         });
 
+    }
+
+    public void close() {
+        closeClient(this);
     }
 
     public static void main(String[] args) {
