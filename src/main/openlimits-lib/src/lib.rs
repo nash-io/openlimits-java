@@ -70,6 +70,18 @@ pub enum OpenlimitsJavaError {
   JNIError(#[from] jni::errors::Error),
 }
 
+pub struct ThreadManager {
+  msg_request_tx: std::sync::mpsc::SyncSender<JavaReportBackMsg>,
+  sub_request_tx: tokio::sync::mpsc::UnboundedSender<SubthreadCmd>
+}
+
+impl Drop for ThreadManager {
+  fn drop(&mut self) {
+    self.msg_request_tx.send(JavaReportBackMsg::Disconnect).ok();
+    self.sub_request_tx.send(SubthreadCmd::Disconnect).ok();
+  }
+}
+
 fn map_openlimits_error_class(err: &openlimits::errors::OpenLimitsError) -> &'static str {
   match err {
     openlimits::errors::OpenLimitsError::BinanceError(_) => "io/nash/openlimits/BinanceError",
@@ -476,9 +488,15 @@ fn init_ws(env: JNIEnv, _class: JClass, cli: JObject, init_params: InitAnyExchan
   let client = env.new_global_ref(cli)?;
   
   let (sub_request_tx, mut sub_rx) = tokio::sync::mpsc::unbounded_channel::<SubthreadCmd>();
-  env.set_rust_field(cli, "_sub_tx", sub_request_tx)?;
+  env.set_rust_field(cli, "_sub_tx", sub_request_tx.clone())?;
   let (msg_request_tx, msg_rx) = std::sync::mpsc::sync_channel::<JavaReportBackMsg>(100);
   let main_thread_message_request_tx = msg_request_tx.clone();
+
+  let thread_manager = ThreadManager {
+    msg_request_tx: msg_request_tx.clone(),
+    sub_request_tx
+  };
+  env.set_rust_field(cli, "_thread_manager", thread_manager)?;
 
   let jvm = env.get_java_vm()?;
   let runtime: MutexGuard<tokio::runtime::Runtime> = env.get_rust_field(cli, "_runtime")?;
@@ -877,7 +895,17 @@ pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_disposeClient(env:
   handle_void_result(env, call());
 }
 
-
+#[no_mangle]
+pub extern "system" fn Java_io_nash_openlimits_ExchangeClient_closeClient(env: JNIEnv, _class: JClass,  cli: JObject) {
+  let call = move || -> OpenLimitsJavaResult<()> {
+    env.take_rust_field::<_,_,ThreadManager>(cli, "_thread_manager")?;
+    env.take_rust_field::<_,_,tokio::sync::mpsc::UnboundedSender<SubthreadCmd>>(cli, "_sub_tx" )?;
+    env.take_rust_field::<_,_,InitAnyExchange>(cli, "_config" )?;
+    env.take_rust_field::<_,_,tokio::runtime::Runtime>(cli, "_runtime")?;
+    Ok(())
+  };
+  handle_void_result(env, call());
+}
 
 
 #[no_mangle]

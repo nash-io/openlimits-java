@@ -10,9 +10,8 @@ public class Example {
                 1000
         );
         while (true) {
-            System.out.println("New client.");
             ExchangeClient client = new ExchangeClient(new ExchangeClientConfig(config));
-            client = null;
+            client.close();
         }
     }
 }

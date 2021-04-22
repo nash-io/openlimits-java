@@ -1,3 +1,6 @@
+#!/bin/bash
+set -e
+
 pushd ..
 ./gradlew assemble
 sudo cp build/libs/libopenlimits_java.so /usr/lib/jni
