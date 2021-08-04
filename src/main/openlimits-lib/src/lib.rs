@@ -5,25 +5,31 @@ use jni::sys::{jsize, jobject};
 use rust_decimal::{Decimal};
 use rust_decimal::prelude::*;
 use chrono::Duration;
+use openlimits::prelude::*;
 use openlimits::{
-  exchange::{OpenLimits, ExchangeAccount, ExchangeMarketData}, 
-  exchange_ws::OpenLimitsWs, 
-  exchange_info::{MarketPair, ExchangeInfoRetrieval},
-  any_exchange::{AnyExchange, InitAnyExchange, AnyWsExchange},
-  nash::{
-    NashCredentials,
-    NashParameters,
-    Environment
+  OpenLimits,
+  exchange::{
+    nash::{
+      NashCredentials,
+      NashParameters
+    },
+    binance::{
+      BinanceCredentials,
+      BinanceParameters,
+    },
+    coinbase::{
+      CoinbaseCredentials,
+      CoinbaseParameters
+    },
+    traits::{
+      ExchangeAccount,
+      ExchangeMarketData,
+      stream::OpenLimitsWs,
+      info::ExchangeInfoRetrieval,
+    },
+    any::{AnyExchange, InitAnyExchange, AnyWsExchange},
   },
-  binance::{
-    BinanceCredentials,
-    BinanceParameters,
-  },
-  coinbase::{
-    CoinbaseCredentials,
-    CoinbaseParameters
-  },
-  model::{      
+  model::{
       OrderBookRequest, 
       OrderBookResponse,
       Liquidity,
@@ -470,7 +476,7 @@ fn market_pair_to_jobject<'a>(env: &JNIEnv<'a>, pair: MarketPair) -> errors::Res
   env.new_object(cls_resp, "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", ctor_args)
 }
 
-type SubResult = std::result::Result<openlimits::exchange_ws::CallbackHandle, openlimits::errors::OpenLimitsError>;
+type SubResult = std::result::Result<openlimits::exchange::traits::stream::CallbackHandle, openlimits::errors::OpenLimitsError>;
 type SubChannel = tokio::sync::oneshot::Sender<SubResult>;
 enum SubthreadCmd {
   Sub(Subscription, SubChannel),
@@ -1435,8 +1441,10 @@ fn get_limit_request(
   let post_only = get_field(env, req, "postOnly",  "Z")?.unwrap_or(JValue::Bool(0)).z().map_err(|_| "Failed to convert boolean to jvalue")?;
   let size = Decimal::from_str(size.as_str()).map_err(|e|e.to_string())?;
   let price = Decimal::from_str(price.as_str()).map_err(|e|e.to_string())?;
+  let client_order_id = get_string(env, req, "clientOrderId")?;
   Ok(
     OpenLimitOrderRequest {
+      client_order_id,
       size,
       time_in_force,
       price,
@@ -1453,9 +1461,10 @@ fn get_market_request(
   let size = get_string_non_null(env, req, "size")?;
   let market_pair = get_string_non_null(env, req, "market")?;
   let size = Decimal::from_str(size.as_str()).map_err(|e|e.to_string())?;
-
+  let client_order_id = get_string(env, req, "clientOrderId")?;
   Ok(
     OpenMarketOrderRequest {
+      client_order_id,
       size,
       market_pair,
     }
